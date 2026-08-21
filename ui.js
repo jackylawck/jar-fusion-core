@@ -1,5 +1,5 @@
 // =========================================================================
-// J.A.R. 聚變核心 3D - 介面控制器 (ui.js v9.0)
+// J.A.R. 聚變核心 3D - 介面控制器 (ui.js v9.1)
 // =========================================================================
 
 const I18N = {
@@ -33,9 +33,9 @@ const I18N = {
       restartCore: '重啟反應爐 (回到安全待機)',
       powerStandby: '🟢 系統主電源：待機中',
       powerRunning: '🔴 系統主電源：運行中',
-      modeEasy: '簡易科普模式 (必穩定)',
-      modeStandard: '工程標準模式 (6參數)',
-      modeAdvanced: '博士科研模式 (9參數)',
+      modeEasy: '🟢 簡易科普模式 (必穩定)',
+      modeStandard: '🟡 工程標準模式 (6 參數)',
+      modeAdvanced: '🔴 博士科研模式 (9 參數)',
       hideHud: '精簡視圖',
       showHud: '完整儀表',
       missionActive: 'MISSION ACTIVE',
@@ -82,9 +82,9 @@ const I18N = {
       restartCore: 'RESTART REACTOR (STANDBY)',
       powerStandby: '🟢 CORE POWER: STANDBY',
       powerRunning: '🔴 CORE POWER: ONLINE',
-      modeEasy: 'EASY (STABLE)',
-      modeStandard: 'STANDARD (6 PARAMS)',
-      modeAdvanced: 'RESEARCH (9 PARAMS)',
+      modeEasy: '🟢 EASY (STABLE)',
+      modeStandard: '🟡 STANDARD (6 PARAMS)',
+      modeAdvanced: '🔴 RESEARCH (9 PARAMS)',
       hideHud: 'HIDE HUD',
       showHud: 'SHOW HUD',
       missionActive: 'MISSION ACTIVE',
@@ -117,7 +117,7 @@ const I18N = {
     if (dom && dom.btnPower) {
       dom.btnPower.innerText = FusionPhysics.state.isOnline ? this.t('powerRunning') : this.t('powerStandby');
     }
-    this.updateModeButtonText(dom);
+    this.updateDropdownOptions(dom);
     CareerManager.updateRank();
   },
 
@@ -126,22 +126,11 @@ const I18N = {
     this.applyLanguage(dom);
   },
 
-  updateModeButtonText(dom) {
-    if (!dom.btnModeToggle) return;
-    const mode = FusionPhysics.gameMode;
-    if (mode === 0) {
-      dom.btnModeToggle.innerHTML = `🟢 <span>${this.t('modeEasy')}</span>`;
-      dom.btnModeToggle.style.borderColor = '#10b981';
-      dom.btnModeToggle.style.color = '#10b981';
-    } else if (mode === 1) {
-      dom.btnModeToggle.innerHTML = `🟡 <span>${this.t('modeStandard')}</span>`;
-      dom.btnModeToggle.style.borderColor = '#f59e0b';
-      dom.btnModeToggle.style.color = '#f59e0b';
-    } else {
-      dom.btnModeToggle.innerHTML = `🔴 <span>${this.t('modeAdvanced')}</span>`;
-      dom.btnModeToggle.style.borderColor = '#ef4444';
-      dom.btnModeToggle.style.color = '#ef4444';
-    }
+  updateDropdownOptions(dom) {
+    if (!dom.selectMode) return;
+    dom.selectMode.options[0].text = this.t('modeEasy');
+    dom.selectMode.options[1].text = this.t('modeStandard');
+    dom.selectMode.options[2].text = this.t('modeAdvanced');
   }
 };
 
@@ -207,7 +196,7 @@ const UI = {
       repairHud: document.getElementById('repair-hud'),
       repairProgressBar: document.getElementById('repair-progress-bar'),
       btnLangToggle: document.getElementById('btn-lang-toggle'),
-      btnModeToggle: document.getElementById('btn-mode-toggle'),
+      selectMode: document.getElementById('select-mode'),
       btnHudToggle: document.getElementById('btn-hud-toggle'),
       controlsPanel: document.getElementById('controls-panel'),
       btnPower: document.getElementById('btn-power'),
@@ -219,6 +208,7 @@ const UI = {
       missionDesc: document.getElementById('mission-desc'),
       missionTimer: document.getElementById('mission-timer'),
       missionProgressBar: document.getElementById('mission-progress-bar'),
+      missionPctLabel: document.getElementById('mission-pct-label'),
       
       incidentModal: document.getElementById('incident-modal'),
       reportCause: document.getElementById('report-cause'),
@@ -239,26 +229,12 @@ const UI = {
 
     this.dom.btnLangToggle.onclick = () => I18N.toggleLanguage(this.dom);
 
-    if (this.dom.btnPower) {
-      this.dom.btnPower.onclick = () => {
-        const online = FusionPhysics.togglePower();
-        if (online) {
-          this.dom.btnPower.innerText = I18N.t('powerRunning');
-          this.dom.btnPower.style.background = 'linear-gradient(135deg, #ef4444, #991b1b)';
-          this.dom.btnPower.style.boxShadow = '0 0 15px rgba(239, 68, 68, 0.6)';
-          this.syncSlidersFromPhysics();
-          AudioSys.playTone(520, 'sine', 0.4, 0.1);
-        } else {
-          this.resetControlsToStandby();
-        }
-      };
-    }
-
-    if (this.dom.btnModeToggle) {
-      this.dom.btnModeToggle.onclick = () => {
-        FusionPhysics.cycleGameMode();
-        I18N.updateModeButtonText(this.dom);
+    // 模式切換下拉選單事件
+    if (this.dom.selectMode) {
+      this.dom.selectMode.onchange = (e) => {
+        FusionPhysics.gameMode = parseInt(e.target.value, 10);
         this.renderDynamicControlSliders();
+        AudioSys.playTone(440 + FusionPhysics.gameMode * 120, 'sine', 0.2, 0.08);
       };
     }
 
@@ -279,7 +255,6 @@ const UI = {
     };
   },
 
-  // 依據難度模式動態生成 4 / 6 / 9 個滑塊
   renderDynamicControlSliders() {
     const mode = FusionPhysics.gameMode;
     const p = FusionPhysics.state;
@@ -532,16 +507,21 @@ const UI = {
     this.dom.victoryModal.classList.add('hidden');
   },
 
-  renderPoloidalFlux(shafranovShift, kappa, delta, deltaZ) {
+  // 強化左側示波器：即時呼吸磁表面 + 磁軸微震動 + 等壓面流動
+  renderPoloidalFlux(shafranovShift, kappa, delta, deltaZ, now) {
     const ctx = this.dom.fluxCtx;
     const w = this.dom.fluxCanvas.width;
     const h = this.dom.fluxCanvas.height;
     ctx.clearRect(0, 0, w, h);
 
+    const t = (now || performance.now()) * 0.003;
+    const pulse = FusionPhysics.state.isOnline ? Math.sin(t) * 1.5 : 0;
+
     const cx = w / 2;
     const cy = h / 2 - (deltaZ * 25.0);
     const numSurfaces = 6;
 
+    // 真空室邊界壁
     ctx.strokeStyle = '#334155';
     ctx.lineWidth = 1.5;
     ctx.beginPath();
@@ -555,9 +535,10 @@ const UI = {
     ctx.closePath();
     ctx.stroke();
 
+    // 磁通量閉合等值面 (動態脈動)
     for (let i = 1; i <= numSurfaces; i++) {
       const rho = i / numSurfaces;
-      const r = 50 * rho;
+      const r = (50 + pulse * (1 - rho)) * rho;
       const shiftX = (shafranovShift * 60) * (1 - Math.pow(rho, 2));
 
       ctx.strokeStyle = i === numSurfaces ? '#38bdf8' : `rgba(0, 240, 255, ${0.15 + rho * 0.45})`;
@@ -574,14 +555,18 @@ const UI = {
       ctx.stroke();
     }
 
-    ctx.fillStyle = '#f43f5e';
+    // 磁軸中心點 (紅光發亮)
+    ctx.fillStyle = FusionPhysics.state.isOnline ? '#f43f5e' : '#64748b';
+    ctx.shadowColor = '#f43f5e';
+    ctx.shadowBlur = FusionPhysics.state.isOnline ? 8 : 0;
     ctx.beginPath();
-    ctx.arc(cx + shafranovShift * 60, cy, 3, 0, Math.PI * 2);
+    ctx.arc(cx + shafranovShift * 60, cy, 3.5, 0, Math.PI * 2);
     ctx.fill();
+    ctx.shadowBlur = 0;
   },
 
   updateHUD(st, now) {
-    this.renderPoloidalFlux(st.shafranovShift, TOKAMAK_GEO.kappa, TOKAMAK_GEO.delta, st.deltaZ);
+    this.renderPoloidalFlux(st.shafranovShift, TOKAMAK_GEO.kappa, TOKAMAK_GEO.delta, st.deltaZ, now);
 
     if (now && now - this.lastUpdateTime < this.updateIntervalMs) return;
     this.lastUpdateTime = now || performance.now();
@@ -614,12 +599,14 @@ const UI = {
     const surviveLabel = isZh ? '存活' : 'Alive';
     d.careerStat.innerText = `Q_max: ${CareerManager.data.maxQ.toFixed(2)} | ${surviveLabel}: ${Math.floor(CareerManager.data.totalSurvivalSeconds)}s`;
 
+    // 右側任務 HUD 即時更新 (帶百分比跳動)
     const q = DynamicMissionEngine.currentQuest;
     if (q) {
       d.missionName.innerText = isZh ? q.titleZh : q.titleEn;
       d.missionDesc.innerText = isZh ? q.descZh : q.descEn;
-      const progressPct = (q.currentProgress / q.targetDuration) * 100;
+      const progressPct = Math.min((q.currentProgress / q.targetDuration) * 100, 100);
       d.missionProgressBar.style.width = `${progressPct}%`;
+      d.missionPctLabel.innerText = `${Math.floor(progressPct)}%`;
       const elapsed = Math.floor(DynamicMissionEngine.timer);
       const mins = Math.floor(elapsed / 60).toString().padStart(2, '0');
       const secs = Math.floor(elapsed % 60).toString().padStart(2, '0');
