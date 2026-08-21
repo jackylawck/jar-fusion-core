@@ -1,0 +1,17 @@
+{
+  "name": "J.A.R. 聚變核心 3D (Joint Advanced Reactor Fusion Core 3D)",
+  "short_name": "JAR-Fusion",
+  "description": "個人托卡馬克核融合反應爐控制台與 3D 打印應力測試沙盒",
+  "start_url": "./index.html",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#020617",
+  "theme_color": "#00f0ff",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='45' fill='%23020617' stroke='%2300f0ff' stroke-width='6'/><circle cx='50' cy='50' r='20' fill='%2300f0ff'/></svg>",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml"
+    }
+  ]
+}
