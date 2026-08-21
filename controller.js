@@ -1,5 +1,5 @@
 // =========================================================================
-// J.A.R. 聚變核心 3D - 遊戲控制器與敘事導演系統 (controller.js v15.0 Gold)
+// J.A.R. 聚變核心 3D - 遊戲控制器與敘事導演系統 (controller.js v16.0 Masterpiece)
 // =========================================================================
 
 const CareerManager = {
@@ -16,7 +16,7 @@ const CareerManager = {
 
   load() {
     try {
-      const saved = localStorage.getItem('JAR_FUSION_CAREER_V15');
+      const saved = localStorage.getItem('JAR_FUSION_CAREER_V16');
       if (saved) this.data = Object.assign(this.data, JSON.parse(saved));
     } catch(e) {}
     this.updateRank();
@@ -24,7 +24,7 @@ const CareerManager = {
 
   save() {
     try {
-      localStorage.setItem('JAR_FUSION_CAREER_V15', JSON.stringify(this.data));
+      localStorage.setItem('JAR_FUSION_CAREER_V16', JSON.stringify(this.data));
     } catch(e) {}
   },
 
@@ -36,6 +36,7 @@ const CareerManager = {
     this.save();
   },
 
+  // 4. 歷史真實實驗驗證標竿成就庫 (Historic Benchmarks)
   checkAchievements() {
     const unlock = (id, titleZh, titleEn) => {
       if (!this.data.achievements.includes(id)) {
@@ -46,9 +47,22 @@ const CareerManager = {
       }
     };
 
-    if (this.data.maxQ >= 1.0) unlock('IGNITION_REACHED', '🏆 成就解鎖：聚變能量增益突破 (Q ≥ 1.0)', '🏆 Achievement: Fusion Gain Breakeven (Q ≥ 1.0)');
-    if (this.data.maxQ >= 5.0) unlock('HIGH_GAIN_BURNING', '🔥 成就解鎖：超高能量自持燃燒 (Q ≥ 5.0)', '🔥 Achievement: High-Gain Burning (Q ≥ 5.0)');
-    if (this.data.totalSurvivalSeconds >= 120) unlock('STABLE_CONFINEMENT', '⏱️ 成就解鎖：百秒超長脈衝磁約束', '⏱️ Achievement: 100s Long-Pulse Confinement');
+    // 歷史里程碑對標
+    if (this.data.maxQ >= 0.67 && this.data.maxQ < 1.0) {
+      unlock('JET_1997_RECORD', '📜 歷史里程碑：追平 JET 1997年 Q=0.67 紀錄！', '📜 Milestone: Reached JET 1997 Q=0.67 Record!');
+    }
+    if (this.data.maxQ >= 1.0) {
+      unlock('IGNITION_REACHED', '🏆 成就解鎖：聚變能量增益突破 (Q ≥ 1.0)', '🏆 Achievement: Fusion Gain Breakeven (Q ≥ 1.0)');
+    }
+    if (this.data.maxQ >= 2.0) {
+      unlock('SPARC_PREDICTION', '⚡ SPARC 預測驗證：高溫超導緊湊堆 Q≥2 達成！', '⚡ SPARC Milestone: Compact HTS Tokamak Q≥2 Verified!');
+    }
+    if (this.data.maxQ >= 10.0) {
+      unlock('ITER_ULTIMATE_GOAL', '🔥 終極科學殿堂：ITER Q≥10 工程燃燒目標達成！', '🔥 Ultimate Goal: ITER Q≥10 Burning Plasma Achieved!');
+    }
+    if (this.data.totalSurvivalSeconds >= 120) {
+      unlock('STABLE_CONFINEMENT', '⏱️ 成就解鎖：百秒超長脈衝穩態磁約束', '⏱️ Achievement: 100s Long-Pulse Confinement');
+    }
   },
 
   updateRank() {
@@ -152,7 +166,11 @@ const IncidentAnalyzer = {
     let advice = isZh ? '請保持各項參數在綠色安全區間內運行。' : 'Maintain plasma parameters within the stable operational window.';
     let triggerMetric = '';
 
-    if (st.deltaZ > 0.35) {
+    if (st.isQuenched) {
+      cause = isZh ? `${st.superconductorType} 超導線圈臨界失超 (Magnet Quench)` : `${st.superconductorType} Superconducting Magnet Quench`;
+      advice = isZh ? '磁場過高或熱負載超限觸發失超。請注意磁體冷卻與應力裕度。' : 'High field/thermal load triggered quench. Watch cryogenic limits.';
+      triggerMetric = `Quench Risk = ${(st.quenchRisk * 100).toFixed(0)}%`;
+    } else if (st.deltaZ > 0.35) {
       cause = isZh ? 'VDE 垂直位移不穩定性撞壁' : 'VDE Vertical Displacement Wall Collision';
       advice = isZh ? '等離子體伸長率過高且極向控制飽和。請保持電流 I_p 穩定。' : 'Elongation too high; control coils saturated. Stabilize plasma current.';
       triggerMetric = `δZ = ${st.deltaZ.toFixed(2)}m`;
@@ -172,10 +190,6 @@ const IncidentAnalyzer = {
       cause = isZh ? '格林沃德密度超限輻射坍縮' : 'Greenwald Limit Density Collapse';
       advice = isZh ? '燃料注入過多導致等離子體猝滅。請減少燃料注入頻率。' : 'Over-fueling quenched plasma. Reduce fuel pellet injection frequency.';
       triggerMetric = `n/n_G = ${st.greenwaldRatio.toFixed(2)}`;
-    } else if (st.maxIntegrity <= 0) {
-      cause = isZh ? '第一壁材料累積熱疲勞融毀' : 'First Wall Cumulative Thermal Failure';
-      advice = isZh ? '第一壁承受長時間高溫。失穩時請第一時間長按故障線圈維修。' : 'First wall melted. Hold-to-repair failing coils immediately when alerted.';
-      triggerMetric = `Integrity = 0%`;
     }
 
     return {
@@ -296,18 +310,18 @@ const GameController = {
     FusionPhysics.state.density0 = 0.5;
     FusionPhysics.state.heatECRH = 0.0;
     FusionPhysics.state.heatNBI = 0.0;
-    FusionPhysics.state.magField = 6.0;
-    FusionPhysics.state.plasmaCurrent = 1.2;
-
+    
     FusionPhysics.state.integrity = 100.0;
     FusionPhysics.state.maxIntegrity = 100.0;
     FusionPhysics.state.kinkDistortion = 0.0;
     FusionPhysics.state.magneticIslandWidth = 0.0;
     FusionPhysics.state.deltaZ = 0.0;
     FusionPhysics.state.failingCoilIndex = -1;
+    FusionPhysics.state.isQuenched = false;
+    FusionPhysics.state.quenchRisk = 0.0;
     FusionPhysics.state.gameOver = false;
 
-    FusionPhysics.initProfiles();
+    FusionPhysics.applyPreset(FusionPhysics.currentPresetKey);
 
     this.hasDisrupted = false;
     this.hasIgnited = false;
