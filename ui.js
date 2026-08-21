@@ -1,3 +1,7 @@
+// =========================================================================
+// J.A.R. 聚變核心 3D - 國際化介面與視圖渲染 (ui.js v8.3)
+// =========================================================================
+
 const I18N = {
   currentLang: (navigator.language && navigator.language.toLowerCase().startsWith('zh')) ? 'zh' : 'en',
 
@@ -9,17 +13,41 @@ const I18N = {
       dualTemp: '雙溫分離 (Te / Ti)',
       safetyFactor: '安全因子 q₉₅ / 歸一化 β_N',
       energyGain: '聚變能量增益 Q (P_fus/P_in)',
+      solHeatLabel: 'SOL 靶板熱流 / 密度極限',
       ecrhPower: '微波加熱 P_ECRH (→Te)',
       nbiPower: '中性束注入 P_NBI (→Ti)',
       toroidalField: '環向磁場 B_T',
       plasmaCurrent: '等離子體電流 I_p',
       injectFuel: '注入 D-T 燃料顆粒',
       divertorPurge: '開啟偏濾器排熱',
+      loadStl: '📁 載入 3D 打印 STL 核心',
       repairing: '正在修復線圈',
       incidentTitle: '事故黑盒子歸因診斷 (Incident Report)',
       primaryCause: '主因判定',
       tacticalAdvice: '首席工程師建議',
-      restartCore: '重啟反應爐循環'
+      restartCore: '重啟反應爐 (回到待機)',
+      powerStandby: '🟢 系統主電源：待機中',
+      powerRunning: '🔴 系統主電源：運行中',
+      modeStandard: '標準模式',
+      modeAdvanced: '科研模式',
+      hideHud: '精簡視圖',
+      showHud: '完整儀表',
+      missionActive: 'MISSION ACTIVE',
+      reportQ: '突破時 Q 值',
+      reportTemp: '等離子體溫度',
+      reportQ95: '安全因子 q95',
+      reportGreenwald: '密度比 n/nG',
+      telemetryTitle: '破裂前 5 秒黑盒子時序回放 (TELEMETRY HISTORY)',
+      victoryTitle: '任務圓滿達成 (MISSION SUCCESS)',
+      victoryDesc: '深空基地電網已成功接入聚變核心，能量輸出穩定！',
+      unlockRank: '解鎖階級：',
+      nextMission: '進入下一階段挑戰',
+      diagTitle: '📐 3D 核心幾何診斷報告',
+      diagTris: '三角面數',
+      diagTurb: '湍流係數',
+      diagImpact: '輸運影響',
+      diagAdviceSafe: '幾何對稱度極高，等離子體流動阻力低，能量約束時間獲得增益。',
+      diagAdviceRough: '模型稜角增加了邊界熱擴散與雜質脫附，建議適當提高磁場 B_T。'
     },
     en: {
       toggleBtn: '中文',
@@ -28,17 +56,41 @@ const I18N = {
       dualTemp: 'Two-Fluid Temp (Te / Ti)',
       safetyFactor: 'Safety Factor q₉₅ / Norm β_N',
       energyGain: 'Fusion Gain Q (P_fus/P_in)',
+      solHeatLabel: 'SOL Heatflux / Density Limit',
       ecrhPower: 'ECRH Heating P_ECRH (→Te)',
       nbiPower: 'NBI Heating P_NBI (→Ti)',
       toroidalField: 'Toroidal Field B_T',
       plasmaCurrent: 'Plasma Current I_p',
       injectFuel: 'Inject D-T Fuel Pellet',
       divertorPurge: 'Purge Divertor Exhaust',
+      loadStl: '📁 Load 3D Print STL Core',
       repairing: 'REPAIRING COIL',
       incidentTitle: 'Incident Black Box Diagnostic',
       primaryCause: 'PRIMARY CAUSE',
       tacticalAdvice: 'CHIEF ENGINEER ADVICE',
-      restartCore: 'RESTART REACTOR CYCLE'
+      restartCore: 'RESTART REACTOR (STANDBY)',
+      powerStandby: '🟢 CORE POWER: STANDBY',
+      powerRunning: '🔴 CORE POWER: ONLINE',
+      modeStandard: 'STANDARD',
+      modeAdvanced: 'RESEARCH',
+      hideHud: 'HIDE HUD',
+      showHud: 'SHOW HUD',
+      missionActive: 'MISSION ACTIVE',
+      reportQ: 'Q at Failure',
+      reportTemp: 'Core Temp',
+      reportQ95: 'Safety q95',
+      reportGreenwald: 'Density n/nG',
+      telemetryTitle: '5-SEC TELEMETRY HISTORY REPLAY',
+      victoryTitle: 'MISSION SUCCESS',
+      victoryDesc: 'Deep space base grid successfully connected to fusion core. Power output stable!',
+      unlockRank: 'Rank Unlocked:',
+      nextMission: 'NEXT MISSION CHALLENGE',
+      diagTitle: '📐 3D CORE GEOMETRY DIAGNOSTIC',
+      diagTris: 'Triangles',
+      diagTurb: 'Turbulence',
+      diagImpact: 'Transport Penalty',
+      diagAdviceSafe: 'High symmetry geometric structure. Low plasma drag with enhanced tau_E.',
+      diagAdviceRough: 'Sharp edges increased turbulent transport and impurity desorption.'
     }
   },
 
@@ -50,6 +102,10 @@ const I18N = {
       el.innerText = this.t(key);
     });
     if (dom && dom.btnLangToggle) dom.btnLangToggle.innerText = this.t('toggleBtn');
+    if (dom && dom.btnPower) {
+      dom.btnPower.innerText = FusionPhysics.state.isOnline ? this.t('powerRunning') : this.t('powerStandby');
+    }
+    CareerManager.updateRank();
   },
 
   toggleLanguage(dom) {
@@ -98,6 +154,7 @@ const UI = {
   lastUpdateTime: 0,
   updateIntervalMs: 50,
   _toastTimer: null,
+  isHudHidden: false,
 
   init() {
     this.dom = {
@@ -119,11 +176,14 @@ const UI = {
       repairHud: document.getElementById('repair-hud'),
       repairProgressBar: document.getElementById('repair-progress-bar'),
       btnLangToggle: document.getElementById('btn-lang-toggle'),
+      btnModeToggle: document.getElementById('btn-mode-toggle'),
+      btnHudToggle: document.getElementById('btn-hud-toggle'),
       labelHeatEcrh: document.getElementById('label-heat-ecrh'),
       labelHeatNbi: document.getElementById('label-heat-nbi'),
       labelMag: document.getElementById('label-mag'),
       labelIp: document.getElementById('label-ip'),
       btnPower: document.getElementById('btn-power'),
+      hudArea: document.getElementById('hud'),
       
       careerRank: document.getElementById('career-rank'),
       careerStat: document.getElementById('career-stat'),
@@ -149,24 +209,41 @@ const UI = {
     I18N.applyLanguage(this.dom);
     this.dom.btnLangToggle.onclick = () => I18N.toggleLanguage(this.dom);
 
-    // 🟢 主電源按鈕事件
+    // 🟢 主電源按鈕
     if (this.dom.btnPower) {
       this.dom.btnPower.onclick = () => {
         const online = FusionPhysics.togglePower();
         if (online) {
-          this.dom.btnPower.innerText = '🔴 系統主電源：運行中';
+          this.dom.btnPower.innerText = I18N.t('powerRunning');
           this.dom.btnPower.style.background = 'linear-gradient(135deg, #ef4444, #991b1b)';
           this.dom.btnPower.style.boxShadow = '0 0 15px rgba(239, 68, 68, 0.6)';
-          document.getElementById('slider-heat-ecrh').value = 10;
-          document.getElementById('slider-heat-nbi').value = 10;
-          this.dom.labelHeatEcrh.innerText = '10.0 MW';
-          this.dom.labelHeatNbi.innerText = '10.0 MW';
+          document.getElementById('slider-heat-ecrh').value = 12;
+          document.getElementById('slider-heat-nbi').value = 12;
+          this.dom.labelHeatEcrh.innerText = '12.0 MW';
+          this.dom.labelHeatNbi.innerText = '12.0 MW';
           AudioSys.playTone(520, 'sine', 0.4, 0.1);
         } else {
-          this.dom.btnPower.innerText = '🟢 系統主電源：待機中';
-          this.dom.btnPower.style.background = 'linear-gradient(135deg, #10b981, #047857)';
-          this.dom.btnPower.style.boxShadow = '0 0 15px rgba(16, 185, 129, 0.4)';
+          this.resetControlsToStandby();
         }
+      };
+    }
+
+    // 模式切換 (標準 vs 科研)
+    if (this.dom.btnModeToggle) {
+      this.dom.btnModeToggle.onclick = () => {
+        const isAdv = FusionPhysics.toggleMode();
+        this.dom.btnModeToggle.innerHTML = isAdv ? `🔥 ${I18N.t('modeAdvanced')}` : `🟢 ${I18N.t('modeStandard')}`;
+        this.dom.btnModeToggle.style.borderColor = isAdv ? '#ef4444' : '#00f0ff';
+        this.dom.btnModeToggle.style.color = isAdv ? '#ef4444' : '#00f0ff';
+      };
+    }
+
+    // HUD 折疊視圖切換
+    if (this.dom.btnHudToggle) {
+      this.dom.btnHudToggle.onclick = () => {
+        this.isHudHidden = !this.isHudHidden;
+        this.dom.hudArea.style.display = this.isHudHidden ? 'none' : 'grid';
+        this.dom.btnHudToggle.innerHTML = this.isHudHidden ? `👁️ ${I18N.t('showHud')}` : `👁️ ${I18N.t('hideHud')}`;
       };
     }
 
@@ -196,6 +273,18 @@ const UI = {
     };
   },
 
+  resetControlsToStandby() {
+    if (this.dom.btnPower) {
+      this.dom.btnPower.innerText = I18N.t('powerStandby');
+      this.dom.btnPower.style.background = 'linear-gradient(135deg, #10b981, #047857)';
+      this.dom.btnPower.style.boxShadow = '0 0 12px rgba(16, 185, 129, 0.4)';
+    }
+    document.getElementById('slider-heat-ecrh').value = 0;
+    document.getElementById('slider-heat-nbi').value = 0;
+    this.dom.labelHeatEcrh.innerText = '0.0 MW';
+    this.dom.labelHeatNbi.innerText = '0.0 MW';
+  },
+
   showSTLDiagnosis(diag) {
     let toast = document.getElementById('stl-diag-toast');
     if (!toast) {
@@ -204,15 +293,18 @@ const UI = {
       document.getElementById('ui-layer').appendChild(toast);
     }
 
+    const isZh = I18N.currentLang === 'zh';
+    const adviceText = (parseFloat(diag.complexityFactor) > 1.3) ? I18N.t('diagAdviceRough') : I18N.t('diagAdviceSafe');
+
     toast.innerHTML = `
       <div class="toast-header">
-        <span>📐 3D 核心幾何診斷報告</span>
+        <span>${I18N.t('diagTitle')}</span>
         <b class="toast-rating">${diag.rating}</b>
       </div>
       <div class="toast-body">
-        <div>三角面數: <b>${diag.triangleCount}</b> | 湍流係數: <b>${diag.complexityFactor}x</b></div>
-        <div class="toast-stat">輸運影響: <span style="color:#ef4444">${diag.transportPenalty}</span></div>
-        <div class="toast-advice">${diag.advice}</div>
+        <div>${I18N.t('diagTris')}: <b>${diag.triangleCount}</b> | ${I18N.t('diagTurb')}: <b>${diag.complexityFactor}x</b></div>
+        <div class="toast-stat">${I18N.t('diagImpact')}: <span style="color:#ef4444">${diag.transportPenalty}</span></div>
+        <div class="toast-advice">${adviceText}</div>
       </div>
     `;
 
@@ -382,11 +474,12 @@ const UI = {
     d.atmosphere.style.background = vm.atmosphereBg;
 
     d.careerRank.innerText = CareerManager.data.rank;
-    d.careerStat.innerText = `Q_max: ${CareerManager.data.maxQ.toFixed(2)} | 存活: ${Math.floor(CareerManager.data.totalSurvivalSeconds)}s`;
+    const isZh = I18N.currentLang === 'zh';
+    const surviveLabel = isZh ? '存活' : 'Alive';
+    d.careerStat.innerText = `Q_max: ${CareerManager.data.maxQ.toFixed(2)} | ${surviveLabel}: ${Math.floor(CareerManager.data.totalSurvivalSeconds)}s`;
 
     const q = DynamicMissionEngine.currentQuest;
     if (q) {
-      const isZh = I18N.currentLang === 'zh';
       d.missionName.innerText = isZh ? q.titleZh : q.titleEn;
       d.missionDesc.innerText = isZh ? q.descZh : q.descEn;
       const progressPct = (q.currentProgress / q.targetDuration) * 100;
