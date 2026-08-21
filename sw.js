@@ -1,4 +1,4 @@
-const CACHE_NAME = 'jar-fusion-core-v3.3';
+const CACHE_NAME = 'jar-fusion-core-v3.4-live';
 const STATIC_ASSETS = [
   './',
   './index.html',
@@ -40,22 +40,27 @@ self.addEventListener('activate', (e) => {
   self.clients.claim();
 });
 
+// Stale-While-Revalidate 策略
 self.addEventListener('fetch', (e) => {
   e.respondWith(
-    caches.match(e.request).then((cachedResponse) => {
-      if (cachedResponse) return cachedResponse;
-      return fetch(e.request).then((networkResponse) => {
-        if (
-          !networkResponse ||
-          networkResponse.status !== 200 ||
-          networkResponse.type !== 'basic' && networkResponse.type !== 'cors'
-        ) {
-          return networkResponse;
-        }
-        const responseToCache = networkResponse.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(e.request, responseToCache));
-        return networkResponse;
-      });
+    caches.match(e.request).then((cached) => {
+      const networked = fetch(e.request)
+        .then((res) => {
+          if (res && res.status === 200) {
+            const resClone = res.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(e.request, resClone));
+          }
+          return res;
+        })
+        .catch(() => cached);
+
+      return cached || networked;
     })
   );
+});
+
+self.addEventListener('message', (e) => {
+  if (e.data === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
 });
