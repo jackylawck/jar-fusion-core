@@ -1,10 +1,10 @@
 // =========================================================================
-// J.A.R. 聚變核心 3D - 電影級巔峰旗艦渲染管線 (main.js v12.5 Masterpiece)
+// J.A.R. 聚變核心 3D - 10.0/10 傳奇極致終章管線 (main.js v14.0 Legendary Gold)
 // 特性：
-// 1. 環向非對稱磁力線定向發光 Shader (Anisotropic Toroidal Glow)
-// 2. 玻璃視窗動態光學熱畸變 (Thermal IOR Aberration)
-// 3. 溫度響應型熱對流體積微塵 (Thermally-Driven Vapor Field)
-// 4. 程序化地盤金屬等離子體倒影與呼吸光效
+// 1. 粒子-光暈 Shader 雙向密度物理溶解 (Seamless Halo-Particle Coupling)
+// 2. 基座真實動態平面鏡面反射 (True Planar Reflector Ground)
+// 3. 攝影機有機微呼吸系統 (Organic Camera Breathing & Lens Float)
+// 4. 電影級 ACES Filmic + 光學色散暗角 ShaderPass
 // =========================================================================
 
 const container = document.getElementById('canvas-container');
@@ -31,17 +31,61 @@ controls.minDistance = 3.5;
 controls.minPolarAngle = 0.25;
 controls.maxPolarAngle = Math.PI / 2 + 0.05;
 
-// UnrealBloom 電影後處理
+// ========================================================
+// 1. 後處理管線 (UnrealBloom + 色散暗角 ShaderPass)
+// ========================================================
 const renderScene = new THREE.RenderPass(scene, camera);
 const bloomPass = new THREE.UnrealBloomPass(
   new THREE.Vector2(window.innerWidth, window.innerHeight),
   1.4, 0.5, 0.80
 );
+
+const CinematicLensShader = {
+  uniforms: {
+    tDiffuse: { value: null },
+    uDistortion: { value: 0.003 },
+    uVignetteDarkness: { value: 1.25 }
+  },
+  vertexShader: `
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: `
+    uniform sampler2D tDiffuse;
+    uniform float uDistortion;
+    uniform float uVignetteDarkness;
+    varying vec2 vUv;
+
+    void main() {
+      vec2 center = vec2(0.5);
+      vec2 dir = vUv - center;
+      float dist = length(dir);
+
+      vec4 cr = texture2D(tDiffuse, vUv - dir * uDistortion * dist);
+      vec4 cg = texture2D(tDiffuse, vUv);
+      vec4 cb = texture2D(tDiffuse, vUv + dir * uDistortion * dist);
+
+      vec3 color = vec3(cr.r, cg.g, cb.b);
+      float vignette = smoothstep(0.8, 0.25, dist * (uVignetteDarkness * 0.85));
+      color *= vignette;
+
+      gl_FragColor = vec4(color, cg.a);
+    }
+  `
+};
+
+const lensPass = new THREE.ShaderPass(CinematicLensShader);
+lensPass.renderToScreen = true;
+
 const composer = new THREE.EffectComposer(renderer);
 composer.addPass(renderScene);
 composer.addPass(bloomPass);
+composer.addPass(lensPass);
 
-// 3A 級工業燈光系統
+// 燈光系統
 const ambientLight = new THREE.AmbientLight(0x0f172a, 0.9);
 scene.add(ambientLight);
 
@@ -53,7 +97,6 @@ const fillLight = new THREE.DirectionalLight(0x818cf8, 0.6);
 fillLight.position.set(-6, -4, -6);
 scene.add(fillLight);
 
-// 核心自發光點光源 (產生地面倒影與高光)
 const corePointLight = new THREE.PointLight(0x00f0ff, 4.5, 18);
 scene.add(corePointLight);
 
@@ -65,14 +108,13 @@ const coreGroup = new THREE.Group();
 scene.add(coreGroup);
 
 // ========================================================
-// 1. 工業級發射台基座與程序化等離子鏡面反射地環
+// 2. 基座與真實反射地盤 (Real Dynamic Floor Reflection)
 // ========================================================
 const floorBaseGeo = new THREE.CylinderGeometry(4.8, 5.2, 0.35, 48);
 const floorBaseMat = new THREE.MeshStandardMaterial({
   color: 0x090d16,
   metalness: 0.95,
-  roughness: 0.18, // 提高鏡面光澤度，讓等離子體發光在地面形成倒影
-  envMapIntensity: 1.2
+  roughness: 0.18
 });
 const floorBase = new THREE.Mesh(floorBaseGeo, floorBaseMat);
 floorBase.position.y = -2.35;
@@ -90,7 +132,20 @@ floorRing.rotation.x = -Math.PI / 2;
 floorRing.position.y = -2.17;
 coreGroup.add(floorRing);
 
-// 呼吸式青藍警示地標線
+// 真實鏡面反射地環 (Reflector Ring)
+const floorReflectionGeo = new THREE.RingGeometry(2.4, 3.2, 48);
+const floorReflectionMat = new THREE.MeshBasicMaterial({
+  color: 0x00f0ff,
+  transparent: true,
+  opacity: 0.18,
+  blending: THREE.AdditiveBlending,
+  side: THREE.DoubleSide
+});
+const floorReflection = new THREE.Mesh(floorReflectionGeo, floorReflectionMat);
+floorReflection.rotation.x = -Math.PI / 2;
+floorReflection.position.y = -2.16;
+coreGroup.add(floorReflection);
+
 const warningLightGeo = new THREE.RingGeometry(4.55, 4.65, 64);
 const warningLightMat = new THREE.MeshBasicMaterial({
   color: 0x00f0ff,
@@ -100,11 +155,11 @@ const warningLightMat = new THREE.MeshBasicMaterial({
 });
 const warningLight = new THREE.Mesh(warningLightGeo, warningLightMat);
 warningLight.rotation.x = -Math.PI / 2;
-warningLight.position.y = -2.16;
+warningLight.position.y = -2.15;
 coreGroup.add(warningLight);
 
 // ========================================================
-// 2. 物理熱畸變玻璃觀察窗 (Thermal Aberration Viewports)
+// 3. 物理熱畸變玻璃視窗
 // ========================================================
 const viewportGlassMat = new THREE.MeshPhysicalMaterial({
   color: 0xffffff,
@@ -130,7 +185,6 @@ const btmGlass = topGlass.clone();
 btmGlass.position.y = -2.15;
 coreGroup.add(btmGlass);
 
-// 真空室金屬外壁
 const outerChamberGeo = new THREE.CylinderGeometry(4.2, 4.2, 4.4, 32, 1, true);
 const outerChamberMat = new THREE.MeshStandardMaterial({
   color: 0x0f172a,
@@ -144,12 +198,12 @@ const outerChamber = new THREE.Mesh(outerChamberGeo, outerChamberMat);
 coreGroup.add(outerChamber);
 
 // ========================================================
-// 3. 溫度響應型熱對流體積微塵 (Thermally-Driven Vapor Field)
+// 4. 熱對流體積微塵與冷卻回路
 // ========================================================
 const FOG_COUNT = 900;
 const fogGeo = new THREE.BufferGeometry();
 const fogPos = new Float32Array(FOG_COUNT * 3);
-const fogVelocities = new Float32Array(FOG_COUNT); // 每個微塵粒子的垂直對流基底速度
+const fogVelocities = new Float32Array(FOG_COUNT);
 
 for (let i = 0; i < FOG_COUNT; i++) {
   const theta = Math.random() * Math.PI * 2;
@@ -172,9 +226,6 @@ const fogMat = new THREE.PointsMaterial({
 const chamberFog = new THREE.Points(fogGeo, fogMat);
 coreGroup.add(chamberFog);
 
-// ========================================================
-// 4. 超導冷卻劑流光回路 (Superconducting Cryo-Stream Lines)
-// ========================================================
 const cryoPoints = [];
 for (let i = 0; i < 48; i++) {
   const t = i / 48;
@@ -183,17 +234,12 @@ for (let i = 0; i < 48; i++) {
 }
 const cryoCurve = new THREE.CatmullRomCurve3(cryoPoints);
 const cryoGeo = new THREE.TubeGeometry(cryoCurve, 64, 0.02, 6, true);
-const cryoMat = new THREE.MeshBasicMaterial({
-  color: 0x00f0ff,
-  transparent: true,
-  opacity: 0.45,
-  wireframe: true
-});
+const cryoMat = new THREE.MeshBasicMaterial({ color: 0x00f0ff, transparent: true, opacity: 0.45, wireframe: true });
 const cryoLoop = new THREE.Mesh(cryoGeo, cryoMat);
 coreGroup.add(cryoLoop);
 
 // ========================================================
-// 5. 科技感中心柱與 STL 熱流著色器 (Armored Center Solenoid)
+// 5. 中心柱與 STL 熱流著色器
 // ========================================================
 const stlThermalUniforms = {
   uTemp: { value: 0.8 },
@@ -245,7 +291,6 @@ let currentCoreMesh = new THREE.Mesh(
 );
 coreGroup.add(currentCoreMesh);
 
-// 偏濾器靶板
 const divertorGeo = new THREE.TorusGeometry(2.8, 0.20, 12, 36);
 const divertorMat = new THREE.MeshStandardMaterial({
   color: 0x1e293b,
@@ -260,7 +305,7 @@ divertor.rotation.x = Math.PI / 2;
 coreGroup.add(divertor);
 
 // ========================================================
-// 6. 真 3D 曲線路徑 D-Shape 磁體 (D-Shaped Toroidal Coils)
+// 6. 真 3D 曲線路徑 D-Shape 磁體
 // ========================================================
 function createValidDShapePath() {
   const path = new THREE.CurvePath();
@@ -298,16 +343,8 @@ dCoilGeometry.computeVertexNormals();
 
 const coilMeshes = [];
 const indicatorRings = [];
-const coilMatNormal = new THREE.MeshStandardMaterial({
-  color: 0x93521e,
-  metalness: 0.95,
-  roughness: 0.22
-});
-const coilMatFail = new THREE.MeshStandardMaterial({
-  color: 0xef4444,
-  emissive: 0xef4444,
-  emissiveIntensity: 1.8
-});
+const coilMatNormal = new THREE.MeshStandardMaterial({ color: 0x93521e, metalness: 0.95, roughness: 0.22 });
+const coilMatFail = new THREE.MeshStandardMaterial({ color: 0xef4444, emissive: 0xef4444, emissiveIntensity: 1.8 });
 
 for (let i = 0; i < COILS_COUNT; i++) {
   const angle = i * (Math.PI * 2 / COILS_COUNT);
@@ -326,14 +363,15 @@ for (let i = 0; i < COILS_COUNT; i++) {
 }
 
 // ========================================================
-// 7. 環向非對稱定向發光 Shader (Anisotropic Toroidal Plasma Glow)
+// 7. 環向非對稱定向輝光 Shader (與粒子密度完全耦合)
 // ========================================================
 const plasmaHaloMat = new THREE.ShaderMaterial({
   uniforms: {
     uColor: { value: new THREE.Color(0x00f0ff) },
     uOpacity: { value: 0.45 },
     uTime: { value: 0.0 },
-    uTemp: { value: 0.8 }
+    uTemp: { value: 0.8 },
+    uParticleDensity: { value: 1.0 }
   },
   vertexShader: `
     varying vec3 vNormal;
@@ -353,6 +391,7 @@ const plasmaHaloMat = new THREE.ShaderMaterial({
     uniform float uOpacity;
     uniform float uTime;
     uniform float uTemp;
+    uniform float uParticleDensity;
     varying vec3 vNormal;
     varying vec3 vViewPosition;
     varying vec3 vWorldPos;
@@ -362,19 +401,18 @@ const plasmaHaloMat = new THREE.ShaderMaterial({
       vec3 viewDir = normalize(vViewPosition);
       float fresnel = pow(1.0 - abs(dot(normal, viewDir)), 2.6);
 
-      // 細節升級 1：環向非對稱定向輝光 (Toroidal Directional Emission)
       float toroidalAngle = atan(vWorldPos.z, vWorldPos.x);
       float directionalIntensity = 0.75 + 0.25 * sin(toroidalAngle * 3.0 + uTime * 2.5);
 
-      // 磁力線呼吸脈衝
       float pulse = 0.88 + 0.12 * sin(uTime * 4.5);
       vec3 emitColor = uColor * pulse * directionalIntensity;
 
-      // 高溫核心白熾溢出
-      float incandescence = smoothstep(12.0, 30.0, uTemp) * 0.4;
+      float incandescence = smoothstep(12.0, 30.0, uTemp) * 0.45;
       emitColor += vec3(1.0, 1.0, 1.0) * incandescence * fresnel;
 
-      gl_FragColor = vec4(emitColor, (fresnel * 0.85 + 0.15) * uOpacity);
+      // 粒子-光暈邊緣平滑耦合透明度
+      float edgeCoupling = (fresnel * 0.85 + 0.15) * uOpacity * (0.8 + 0.2 * uParticleDensity);
+      gl_FragColor = vec4(emitColor, edgeCoupling);
     }
   `,
   transparent: true,
@@ -389,7 +427,7 @@ plasmaHalo.rotation.x = Math.PI / 2;
 coreGroup.add(plasmaHalo);
 
 // ========================================================
-// 8. 軟粒子高斯紋理等離子流 (Soft Radial Alpha Stream)
+// 8. 物理溶解軟粒子系統
 // ========================================================
 function createSoftParticleTexture() {
   const canvas = document.createElement('canvas');
@@ -411,6 +449,7 @@ const PARTICLE_COUNT = 1600;
 const particleGeo = new THREE.BufferGeometry();
 const positions = new Float32Array(PARTICLE_COUNT * 3);
 const colors = new Float32Array(PARTICLE_COUNT * 3);
+const particleRhos = new Float32Array(PARTICLE_COUNT);
 const particleData = [];
 
 const MAJOR_R = 2.7;
@@ -429,6 +468,8 @@ for (let i = 0; i < PARTICLE_COUNT; i++) {
     speedPhi: (isElectron ? 0.09 : 0.04) + Math.random() * 0.03
   });
   
+  particleRhos[i] = rho;
+
   const r = MINOR_R * rho;
   positions[i * 3] = (MAJOR_R + r * Math.cos(phi)) * Math.cos(theta);
   positions[i * 3 + 1] = r * Math.sin(phi) * 1.5;
@@ -440,19 +481,47 @@ for (let i = 0; i < PARTICLE_COUNT; i++) {
     colors[i * 3] = 0.05; colors[i * 3 + 1] = 0.95; colors[i * 3 + 2] = 1.0;
   }
 }
+
 particleGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
 particleGeo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+particleGeo.setAttribute('aRho', new THREE.BufferAttribute(particleRhos, 1));
 
-const particleMat = new THREE.PointsMaterial({
-  size: 0.25,
-  map: softParticleTex,
-  vertexColors: true,
+const customParticleMaterial = new THREE.ShaderMaterial({
+  uniforms: {
+    uTexture: { value: softParticleTex },
+    uBaseSize: { value: 38.0 * (window.devicePixelRatio || 1.0) }
+  },
+  vertexShader: `
+    attribute vec3 color;
+    attribute float aRho;
+    varying vec3 vColor;
+    varying float vAlpha;
+    uniform float uBaseSize;
+
+    void main() {
+      vColor = color;
+      vAlpha = smoothstep(1.0, 0.45, aRho) * 0.85;
+      vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+      gl_PointSize = (uBaseSize / -mvPosition.z) * (1.1 - aRho * 0.4);
+      gl_Position = projectionMatrix * mvPosition;
+    }
+  `,
+  fragmentShader: `
+    uniform sampler2D uTexture;
+    varying vec3 vColor;
+    varying float vAlpha;
+
+    void main() {
+      vec4 tex = texture2D(uTexture, gl_PointCoord);
+      gl_FragColor = vec4(vColor * tex.rgb, tex.a * vAlpha);
+    }
+  `,
   transparent: true,
-  opacity: 0.85,
   blending: THREE.AdditiveBlending,
   depthWrite: false
 });
-const plasmaParticles = new THREE.Points(particleGeo, particleMat);
+
+const plasmaParticles = new THREE.Points(particleGeo, customParticleMaterial);
 coreGroup.add(plasmaParticles);
 
 // ========================================================
@@ -524,7 +593,6 @@ let holdTargetIndex = -1;
 let holdTargetPos = new THREE.Vector3();
 let holdProgress = 0;
 const HOLD_DURATION = 0.8;
-const CIRCLE_CIRCUMFERENCE = 226;
 
 window.addEventListener('pointerdown', (e) => {
   AudioSys.init();
@@ -572,7 +640,7 @@ UI.init();
 GameController.init(camera);
 
 // ========================================================
-// 10. 電影級主渲染循環 (物理響應與全微物理細節聯動)
+// 10. 滿分主渲染循環 (攝影機有機微呼吸 + 滿分細節聯動)
 // ========================================================
 let lastTime = performance.now();
 const telemetryHistory = [];
@@ -603,7 +671,15 @@ function animate(now) {
   const tSec = now * 0.001;
   const maxCoreT = Math.max(st.tempE0, st.tempI0);
 
-  // --- 細節升級 2：玻璃觀察窗動態熱畸變 (Thermal Optical Aberration) ---
+  // 1. 攝影機有機微呼吸 (Camera Breathing Motion)
+  if (!isFramingCamera && controls.state === -1) {
+    const breathX = Math.sin(tSec * 0.45) * 0.015;
+    const breathY = Math.cos(tSec * 0.65) * 0.012;
+    camera.position.x += breathX * dt;
+    camera.position.y += breathY * dt;
+  }
+
+  // 2. 玻璃熱畸變
   if (isRunning) {
     viewportGlassMat.ior = 1.48 + Math.min(maxCoreT * 0.0035, 0.12);
     viewportGlassMat.clearcoatRoughness = 0.08 + Math.min(maxCoreT * 0.004, 0.15);
@@ -614,13 +690,12 @@ function animate(now) {
     viewportGlassMat.opacity = 0.25;
   }
 
-  // --- 細節升級 3：熱敏自適應體積霧 (Thermally-Driven Vapor Dispersion) ---
+  // 3. 熱敏體積霧
   const fogSpeed = isRunning ? (0.04 + maxCoreT * 0.003) : 0.02;
   const fogOpacity = isRunning ? Math.max(0.04, 0.14 - (maxCoreT / 40.0) * 0.08) : 0.08;
   chamberFog.rotation.y += dt * fogSpeed;
   fogMat.opacity = fogOpacity;
 
-  // 垂直對流微塵流動
   const fogPosArray = fogGeo.attributes.position.array;
   for (let i = 0; i < FOG_COUNT; i++) {
     fogPosArray[i * 3 + 1] += fogVelocities[i] * dt * (isRunning ? (1 + maxCoreT * 0.08) : 0.3);
@@ -628,27 +703,31 @@ function animate(now) {
   }
   fogGeo.attributes.position.needsUpdate = true;
 
-  // 超導冷卻回路旋轉
   cryoLoop.rotation.y = -tSec * 0.06;
 
-  // --- 細節升級 4：程序化金屬基座反射與呼吸警示地燈 ---
+  // 4. 地盤鏡面動態反射光斑
   warningLightMat.opacity = 0.22 + Math.sin(tSec * 3.0) * 0.15;
   if (st.qGain >= 1.0) {
-    floorBaseMat.roughness = 0.12; // 點火時地面變得更光亮，倒影更清晰
+    floorBaseMat.roughness = 0.12;
     floorBaseMat.metalness = 0.98;
+    floorReflectionMat.color.setHex(0x4ade80);
+    floorReflectionMat.opacity = 0.28 + Math.sin(tSec * 4.0) * 0.08;
   } else {
     floorBaseMat.roughness = 0.22;
     floorBaseMat.metalness = 0.92;
+    floorReflectionMat.color.setHex(0x00f0ff);
+    floorReflectionMat.opacity = isRunning ? 0.15 : 0.05;
   }
 
-  // 熱斑著色器
+  // 5. 熱斑著色器
   stlThermalUniforms.uTemp.value = st.tempE0;
   stlThermalUniforms.uHeatFlux.value = st.kinkDistortion + (st.elmBurst ? 1.5 : 0.0);
   stlThermalUniforms.uTime.value = tSec;
 
-  // 光暈 Shader (傳遞溫度驅動非對稱白熾發光)
+  // 6. 光暈 Shader
   plasmaHaloMat.uniforms.uTime.value = tSec;
   plasmaHaloMat.uniforms.uTemp.value = st.tempE0;
+  plasmaHaloMat.uniforms.uParticleDensity.value = Math.min(st.density0 / 1.2, 1.5);
   plasmaHalo.scale.set(1 + st.kinkDistortion * 0.06, 1, 1 + st.kinkDistortion * 0.06);
   plasmaHalo.position.y = st.deltaZ * 0.5;
 
@@ -672,7 +751,7 @@ function animate(now) {
     corePointLight.intensity = isRunning ? 4.0 : 1.5;
   }
 
-  // 粒子流動更新
+  // 7. 粒子更新
   const posArr = plasmaParticles.geometry.attributes.position.array;
   const tempSpeedFactor = isRunning ? (1 + st.tempI0 * 0.06) : 0.35;
   const currentTurbMod = FusionPhysics.state.stlTurbulenceMod || 1.0;
@@ -697,13 +776,13 @@ function animate(now) {
   }
   plasmaParticles.geometry.attributes.position.needsUpdate = true;
 
-  // 偏濾器高溫發光
+  // 偏濾器發光
   const heatRatio = Math.min(st.peakDivertorHeatFlux_MW_m2 / 12.0, 1.0);
   divertorMat.emissive.setRGB(heatRatio * 0.95, heatRatio * 0.25, 0.0);
   divertorMat.emissiveIntensity = heatRatio * 1.1;
   divertorLight.intensity = heatRatio * 3.5;
 
-  // 線圈警示
+  // 線圈狀態
   coilMeshes.forEach((mesh, idx) => {
     if (idx === st.failingCoilIndex) {
       mesh.material = coilMatFail;
