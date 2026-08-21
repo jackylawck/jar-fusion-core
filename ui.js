@@ -1,5 +1,5 @@
 // =========================================================================
-// J.A.R. 聚變核心 3D - 100% 全雙語介面與證書系統 (ui.js v15.4 Mobile Gold)
+// J.A.R. 聚變核心 3D - 100% 全雙語介面與證書系統 (ui.js v15.5 Top Drawer)
 // =========================================================================
 
 const I18N = {
@@ -9,6 +9,7 @@ const I18N = {
     zh: {
       toggleBtn: 'English',
       btnCert: '📜 證書',
+      menu: '選單',
       wallIntegrity: '第一壁狀態',
       poloidalFlux: '極向磁通量表面 Ψ(R,Z)',
       dualTemp: '雙溫分離 (Te / Ti)',
@@ -72,6 +73,7 @@ const I18N = {
     en: {
       toggleBtn: '中文',
       btnCert: '📜 License',
+      menu: 'MENU',
       wallIntegrity: 'First Wall',
       poloidalFlux: 'Poloidal Flux Ψ(R,Z)',
       dualTemp: 'Two-Fluid Temp (Te / Ti)',
@@ -151,13 +153,15 @@ const I18N = {
     if (dom && dom.lblDockToggle) {
       dom.lblDockToggle.innerText = UI.isDockCollapsed ? this.t('dockExpand') : this.t('dockCollapse');
     }
+    if (dom && dom.lblMenuToggle) {
+      dom.lblMenuToggle.innerText = this.t('menu');
+    }
     this.updateDropdownOptions(dom);
     CareerManager.updateRank();
 
     if (dom && dom.careerRank) {
       const isZh = this.currentLang === 'zh';
       dom.careerRank.innerText = isZh ? CareerManager.data.rankZh : CareerManager.data.rankEn;
-      const surviveLabel = isZh ? '存活' : 'Alive';
       dom.careerStat.innerText = `Q: ${CareerManager.data.maxQ.toFixed(2)} | ${Math.floor(CareerManager.data.totalSurvivalSeconds)}s`;
     }
 
@@ -230,6 +234,7 @@ const UI = {
   _currentTutStep: 0,
   isHudHidden: false,
   isDockCollapsed: false,
+  isTopMenuOpen: false,
 
   init() {
     this.dom = {
@@ -260,6 +265,9 @@ const UI = {
       hudArea: document.getElementById('hud'),
       btnDockToggle: document.getElementById('btn-dock-toggle'),
       lblDockToggle: document.getElementById('lbl-dock-toggle'),
+      btnTopMenuToggle: document.getElementById('btn-top-menu-toggle'),
+      topMenuDrawer: document.getElementById('top-menu-drawer'),
+      lblMenuToggle: document.getElementById('lbl-menu-toggle'),
       
       careerRank: document.getElementById('career-rank'),
       careerStat: document.getElementById('career-stat'),
@@ -301,7 +309,15 @@ const UI = {
       };
     }
 
-    // 精簡 HUD 切換：收起/顯示 4 大數據卡
+    // 頂部選單折疊開關
+    if (this.dom.btnTopMenuToggle) {
+      this.dom.btnTopMenuToggle.onclick = () => {
+        this.isTopMenuOpen = !this.isTopMenuOpen;
+        this.dom.topMenuDrawer.classList.toggle('top-drawer-closed', !this.isTopMenuOpen);
+      };
+    }
+
+    // 精簡 HUD 切換
     if (this.dom.btnHudToggle) {
       this.dom.btnHudToggle.onclick = () => {
         this.isHudHidden = !this.isHudHidden;
@@ -313,7 +329,7 @@ const UI = {
       };
     }
 
-    // 控制台折疊切換
+    // 底部控制台折疊
     if (this.dom.btnDockToggle) {
       this.dom.btnDockToggle.onclick = () => {
         this.isDockCollapsed = !this.isDockCollapsed;
@@ -322,7 +338,7 @@ const UI = {
       };
     }
 
-    // 抽屜點擊展開/收起
+    // 左右抽屜切換
     const fluxDrawer = document.getElementById('flux-monitor');
     const fluxTab = document.getElementById('flux-drawer-tab');
     if (fluxTab && fluxDrawer) {
