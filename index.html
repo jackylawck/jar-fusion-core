@@ -29,21 +29,6 @@
   <meta name="twitter:description" content="Experience real-time burning plasma, Eich-scaling SOL divertor and 3D print STL thermal mapping.">
   <meta name="twitter:image" content="https://jackylawck.github.io/jar-fusion-core/jarfusioncore512icon.png">
 
-  <script type="application/ld+json">
-  {
-    "@context": "https://schema.org",
-    "@type": "WebApplication",
-    "name": "J.A.R. Fusion Core 3D",
-    "alternateName": "J.A.R. 聚變核心 3D",
-    "url": "https://jackylawck.github.io/jar-fusion-core/",
-    "description": "A research-grade WebGL Tokamak Nuclear Fusion Simulator.",
-    "applicationCategory": "EducationalApplication, SimulationApplication",
-    "operatingSystem": "All",
-    "browserRequirements": "Requires JavaScript. Requires WebGL / HTML5.",
-    "inLanguage": ["en", "zh-HK", "zh-TW"]
-  }
-  </script>
-
   <link rel="manifest" href="manifest.json">
   <link rel="icon" type="image/png" sizes="192x192" href="./jarfusioncore192icon.png">
   <link rel="icon" type="image/png" sizes="512x512" href="./jarfusioncore512icon.png">
@@ -68,6 +53,7 @@
   <div id="atmosphere-glow"></div>
   <div id="scanlines"></div>
 
+  <!-- 維修 HUD -->
   <div id="repair-hud" class="hidden">
     <svg class="progress-ring" width="90" height="90">
       <circle class="progress-ring__circle-bg" stroke="#1e293b" stroke-width="6" fill="transparent" r="36" cx="45" cy="45"/>
@@ -77,7 +63,7 @@
   </div>
 
   <div id="ui-layer">
-    <!-- 頂部欄 -->
+    <!-- 頂部資訊與控制欄 -->
     <div id="top-bar">
       <div id="top-header-row">
         <div id="integrity-container">
@@ -90,28 +76,41 @@
             <div id="integrity-bar"></div>
           </div>
         </div>
+
         <div id="career-badge">
-          <span class="career-title" id="career-rank">實習操作員</span>
+          <span class="career-title" id="career-rank">國家聚變實驗室・見習員</span>
           <span class="career-stat" id="career-stat">Q_max: 0.00 | 存活: 0s</span>
         </div>
-        <!-- 難度模式切換 (簡易穩定 vs 進階科研) -->
-        <button id="btn-mode-toggle" class="btn-top-util">🟢 <span data-i18n="modeStandard">標準模式</span></button>
+
+        <!-- 難度模式選單 -->
+        <div class="mode-select-wrap">
+          <select id="select-mode" class="select-mode-dropdown">
+            <option value="0">🟢 簡易科普模式 (必穩定)</option>
+            <option value="1">🟡 工程標準模式 (6 參數)</option>
+            <option value="2">🔴 博士科研模式 (9 參數)</option>
+          </select>
+        </div>
+
+        <button id="btn-cert" class="btn-top-util" data-i18n="btnCert">📜 授權證書</button>
         <button id="btn-lang-toggle" class="btn-top-util">English</button>
         <button id="btn-hud-toggle" class="btn-top-util">👁️ <span data-i18n="hideHud">精簡視圖</span></button>
       </div>
       <div id="alert-msg"></div>
     </div>
 
-    <!-- 右上角任務 HUD -->
+    <!-- 右上角敘事動態任務 HUD -->
     <div id="mission-hud">
       <div class="mission-header">
         <span class="mission-tag" data-i18n="missionActive">MISSION ACTIVE</span>
         <span id="mission-timer">00:45</span>
       </div>
-      <div class="mission-name" id="mission-name">階段任務：核心電離預熱</div>
-      <div class="mission-desc" id="mission-desc">啟動主電源並提升加熱使 Te ≥ 15 keV</div>
-      <div class="mission-progress-bar-bg">
-        <div id="mission-progress-bar"></div>
+      <div class="mission-name" id="mission-name">任務：為月球基地應急電網供電</div>
+      <div class="mission-desc" id="mission-desc">啟動反應堆並保持 Q ≥ 1.05，拯救 4,200 名月面科研人員</div>
+      <div class="mission-progress-row">
+        <div class="mission-progress-bar-bg">
+          <div id="mission-progress-bar"></div>
+        </div>
+        <span id="mission-pct-label">0%</span>
       </div>
     </div>
 
@@ -122,9 +121,8 @@
       <div class="monitor-foot" id="flux-info">κ: 1.75 | δZ: 0.00m</div>
     </div>
 
-    <!-- 底部整合控制區 (HUD 下沉貼底，不擋中間視角) -->
+    <!-- 底部整合 Dock (開闊中間 3D 視角) -->
     <div id="bottom-dock">
-      <!-- 核心 4 卡片 HUD (貼齊底部控制台) -->
       <div id="hud">
         <div class="hud-card hud-card-core">
           <div class="hud-title" data-i18n="dualTemp">雙溫分離 (Te / Ti)</div>
@@ -149,36 +147,12 @@
         </div>
       </div>
 
-      <!-- 控制面板 -->
-      <div id="controls-panel">
-        <div class="control-group">
-          <label><span data-i18n="ecrhPower">微波加熱 P_ECRH (→Te)</span>: <span id="label-heat-ecrh">0.0 MW</span></label>
-          <input type="range" id="slider-heat-ecrh" min="0" max="40" step="0.5" value="0">
-        </div>
-        <div class="control-group">
-          <label><span data-i18n="nbiPower">中性束注入 P_NBI (→Ti)</span>: <span id="label-heat-nbi">0.0 MW</span></label>
-          <input type="range" id="slider-heat-nbi" min="0" max="40" step="0.5" value="0">
-        </div>
-        <div class="control-group">
-          <label><span data-i18n="toroidalField">環向磁場 B_T</span>: <span id="label-mag">6.0 T</span></label>
-          <input type="range" id="slider-mag" min="2" max="15" step="0.2" value="6">
-        </div>
-        <div class="control-group">
-          <label><span data-i18n="plasmaCurrent">等離子體電流 I_p</span>: <span id="label-ip">1.2 MA</span></label>
-          <input type="range" id="slider-ip" min="0.4" max="3.0" step="0.1" value="1.2">
-        </div>
-        <div class="btn-row">
-          <button class="btn-power" id="btn-power" data-i18n="powerStandby">🟢 系統主電源：待機中</button>
-          <button class="btn-fuel" id="btn-fuel" data-i18n="injectFuel">注入 D-T 燃料顆粒</button>
-          <button class="btn-divertor" id="btn-cool" data-i18n="divertorPurge">開啟偏濾器排熱</button>
-          <button class="btn-stl" id="btn-load-stl" data-i18n="loadStl">📁 載入 3D 打印 STL 核心</button>
-          <input type="file" id="stl-file-input" accept=".stl" style="display:none;">
-        </div>
-      </div>
+      <!-- 動態控制面板 -->
+      <div id="controls-panel"></div>
     </div>
   </div>
 
-  <!-- 事故歸因報告 (全英/雙語支援) -->
+  <!-- 事故歸因報告 (100% 雙語黑盒子) -->
   <div id="incident-modal" class="modal-overlay hidden">
     <div class="modal-card">
       <div class="modal-header">
@@ -201,11 +175,11 @@
           <canvas id="telemetryCanvas" width="440" height="110"></canvas>
         </div>
         <div class="report-section advice-box">
-          <div class="report-label" data-i18n="tacticalAdvice">首席工程師建議</div>
+          <div class="report-label" data-i18n="tacticalAdvice">國家能源研究院專家建議</div>
           <div class="report-advice" id="report-advice">下次提高加熱功率前，請優先提高環向磁場 B_T 或適度進行偏濾器排氣。</div>
         </div>
       </div>
-      <button class="btn-restart" id="btn-restart" data-i18n="restartCore">重啟反應爐 (回到待機)</button>
+      <button class="btn-restart" id="btn-restart" data-i18n="restartCore">重啟反應爐 (回到安全待機)</button>
     </div>
   </div>
 
@@ -219,10 +193,27 @@
       <div class="modal-body">
         <p id="victory-text" data-i18n="victoryDesc">深空基地電網已成功接入聚變核心，能量輸出穩定！</p>
         <div class="victory-unlock">
-          <span data-i18n="unlockRank">解鎖階級：</span><b id="victory-rank">托卡馬克資深工程師</b>
+          <span data-i18n="unlockRank">解鎖國家級官銜：</span><b id="victory-rank">托卡馬克總體技術總監</b>
         </div>
       </div>
       <button class="btn-next-mission" id="btn-next-mission" data-i18n="nextMission">進入下一階段挑戰</button>
+    </div>
+  </div>
+
+  <!-- 📜 國家級聚變操作員資格證書 (Certificate Share Card) -->
+  <div id="cert-modal" class="modal-overlay hidden">
+    <div class="modal-card cert-card">
+      <div class="modal-header">
+        <span class="modal-icon">🎖️</span>
+        <span class="modal-title" data-i18n="certTitle">國家聚變能源研究院・官方執照</span>
+      </div>
+      <div class="modal-body">
+        <canvas id="certCanvas" width="560" height="320"></canvas>
+      </div>
+      <div class="cert-btn-row">
+        <button class="btn-download-cert" id="btn-download-cert" data-i18n="btnDownloadCert">💾 保存證書圖片</button>
+        <button class="btn-close-cert" id="btn-close-cert" data-i18n="btnCloseCert">關閉</button>
+      </div>
     </div>
   </div>
 
