@@ -1,5 +1,5 @@
 // =========================================================================
-// J.A.R. 聚變核心 3D - 100% 全雙語介面與證書系統 (ui.js v15.5 Top Drawer)
+// J.A.R. 聚變核心 3D - 100% 全雙語介面與證書系統 (ui.js v16.0 Masterpiece)
 // =========================================================================
 
 const I18N = {
@@ -16,6 +16,8 @@ const I18N = {
       safetyFactor: '安全因子 q₉₅ / 歸一化 β_N',
       energyGain: '聚變能量增益 Q',
       solHeatLabel: 'SOL 靶板熱流 / 密度極限',
+      neutronFluxLabel: '中子通量率 (Neutron Rate)',
+      quenchRiskLabel: '超導失超風險 (Quench Risk)',
       ecrhPower: '微波加熱 P_ECRH',
       nbiPower: '中性束注入 P_NBI',
       toroidalField: '環向磁場 B_T',
@@ -80,6 +82,8 @@ const I18N = {
       safetyFactor: 'Safety q₉₅ / Norm β_N',
       energyGain: 'Fusion Gain Q',
       solHeatLabel: 'SOL Heatflux / Limit',
+      neutronFluxLabel: '14.1 MeV Neutron Rate',
+      quenchRiskLabel: 'Coil Quench Risk',
       ecrhPower: 'ECRH Heating',
       nbiPower: 'NBI Heating',
       toroidalField: 'Toroidal Field B_T',
@@ -188,18 +192,29 @@ const I18N = {
     dom.selectMode.options[0].text = this.t('modeEasy');
     dom.selectMode.options[1].text = this.t('modeStandard');
     dom.selectMode.options[2].text = this.t('modeAdvanced');
+
+    if (dom.selectPreset) {
+      const isZh = this.currentLang === 'zh';
+      Object.keys(REACTOR_PRESETS).forEach((key, idx) => {
+        if (dom.selectPreset.options[idx]) {
+          dom.selectPreset.options[idx].text = isZh ? REACTOR_PRESETS[key].nameZh : REACTOR_PRESETS[key].nameEn;
+        }
+      });
+    }
   }
 };
 
 const UIViewModel = {
   fromState(st) {
-    const isQUnstable = st.q95 < 2.0 || st.betaN > 2.8 || st.deltaZ > 0.25;
+    const isQUnstable = st.q95 < 2.0 || st.betaN > 2.8 || st.deltaZ > 0.25 || st.isQuenched;
     const isIgnition = st.qGain >= 1.0;
     const maxT = Math.max(st.tempE0, st.tempI0);
     const scanlineSpeed = Math.max(6.0 - maxT * 0.25, 0.8).toFixed(2);
 
     let atmosphereBg = '';
-    if (maxT > 20.0 || st.peakDivertorHeatFlux_MW_m2 > 10.0) {
+    if (st.isQuenched) {
+      atmosphereBg = `radial-gradient(ellipse at 50% 55%, rgba(239, 68, 68, 0.25) 0%, transparent 70%)`;
+    } else if (maxT > 20.0 || st.peakDivertorHeatFlux_MW_m2 > 10.0) {
       atmosphereBg = `radial-gradient(ellipse at 50% 55%, rgba(244, 63, 94, ${Math.min(0.05 + maxT * 0.003, 0.18)}) 0%, transparent 70%)`;
     } else if (isIgnition) {
       atmosphereBg = `radial-gradient(ellipse at 50% 55%, rgba(74, 222, 128, 0.12) 0%, transparent 70%)`;
@@ -207,21 +222,26 @@ const UIViewModel = {
       atmosphereBg = `radial-gradient(ellipse at 50% 55%, rgba(0, 240, 255, 0.06) 0%, transparent 65%)`;
     }
 
+    let subMetricText = `${st.peakDivertorHeatFlux_MW_m2.toFixed(1)} MW/m²`;
+    if (FusionPhysics.gameMode === 2) {
+      subMetricText = `${(st.neutronFlux / 1e18).toFixed(2)} × 10¹⁸ n/s`;
+    }
+
     return {
       teText: st.tempE0.toFixed(1),
       tiText: st.tempI0.toFixed(1),
-      q95BetaText: `q:${st.q95.toFixed(2)} | β:${st.betaN.toFixed(2)}`,
+      q95BetaText: st.isQuenched ? `QUENCHED` : `q:${st.q95.toFixed(2)} | β:${st.betaN.toFixed(2)}`,
       q95BetaColor: isQUnstable ? '#ef4444' : '#38bdf8',
       qText: st.qGain.toFixed(2),
       isIgnition,
-      divHeatText: `${st.peakDivertorHeatFlux_MW_m2.toFixed(1)} MW/m²`,
+      divHeatText: subMetricText,
       divHeatColor: st.peakDivertorHeatFlux_MW_m2 > 10.0 ? '#ef4444' : '#cbd5e1',
       integrityText: `${st.integrity.toFixed(1)}%`,
       integrityWidth: `${st.integrity}%`,
       integrityMaxWidth: `${st.maxIntegrity}%`,
       scanlineSpeed,
       atmosphereBg,
-      fluxInfoText: `κ: ${TOKAMAK_GEO.kappa} | δZ: ${st.deltaZ.toFixed(2)}m`
+      fluxInfoText: `κ: ${TOKAMAK_GEO.kappa} | Q_risk: ${(st.quenchRisk * 100).toFixed(0)}%`
     };
   }
 };
@@ -257,6 +277,7 @@ const UI = {
       repairProgressBar: document.getElementById('repair-progress-bar'),
       btnLangToggle: document.getElementById('btn-lang-toggle'),
       selectMode: document.getElementById('select-mode'),
+      selectPreset: document.getElementById('select-preset'),
       btnHudToggle: document.getElementById('btn-hud-toggle'),
       lblHudToggle: document.getElementById('lbl-hud-toggle'),
       btnCert: document.getElementById('btn-cert'),
@@ -309,7 +330,13 @@ const UI = {
       };
     }
 
-    // 頂部選單折疊開關
+    if (this.dom.selectPreset) {
+      this.dom.selectPreset.onchange = (e) => {
+        FusionPhysics.applyPreset(e.target.value);
+        AudioSys.playTone(600, 'triangle', 0.3, 0.1);
+      };
+    }
+
     if (this.dom.btnTopMenuToggle) {
       this.dom.btnTopMenuToggle.onclick = () => {
         this.isTopMenuOpen = !this.isTopMenuOpen;
@@ -317,7 +344,6 @@ const UI = {
       };
     }
 
-    // 精簡 HUD 切換
     if (this.dom.btnHudToggle) {
       this.dom.btnHudToggle.onclick = () => {
         this.isHudHidden = !this.isHudHidden;
@@ -329,7 +355,6 @@ const UI = {
       };
     }
 
-    // 底部控制台折疊
     if (this.dom.btnDockToggle) {
       this.dom.btnDockToggle.onclick = () => {
         this.isDockCollapsed = !this.isDockCollapsed;
@@ -338,7 +363,6 @@ const UI = {
       };
     }
 
-    // 左右抽屜切換
     const fluxDrawer = document.getElementById('flux-monitor');
     const fluxTab = document.getElementById('flux-drawer-tab');
     if (fluxTab && fluxDrawer) {
@@ -390,19 +414,19 @@ const UI = {
     let html = `
       <div class="control-group">
         <label><span>${I18N.t('ecrhPower')}</span>: <span id="lbl-ecrh">${p.heatECRH.toFixed(1)} MW</span></label>
-        <input type="range" id="slider-heat-ecrh" min="0" max="40" step="0.5" value="${p.heatECRH}">
+        <input type="range" id="slider-heat-ecrh" min="0" max="60" step="0.5" value="${p.heatECRH}">
       </div>
       <div class="control-group">
         <label><span>${I18N.t('nbiPower')}</span>: <span id="lbl-nbi">${p.heatNBI.toFixed(1)} MW</span></label>
-        <input type="range" id="slider-heat-nbi" min="0" max="40" step="0.5" value="${p.heatNBI}">
+        <input type="range" id="slider-heat-nbi" min="0" max="60" step="0.5" value="${p.heatNBI}">
       </div>
       <div class="control-group">
-        <label><span>${I18N.t('toroidalField')}</span>: <span id="lbl-mag">${p.magField.toFixed(1)} T</span></label>
-        <input type="range" id="slider-mag" min="2" max="15" step="0.2" value="${p.magField}">
+        <label><span>${I18N.t('toroidalField')} (${p.superconductorType})</span>: <span id="lbl-mag">${p.magField.toFixed(1)} T</span></label>
+        <input type="range" id="slider-mag" min="2" max="${p.superconductorType === 'HTS' ? 20 : 12}" step="0.2" value="${p.magField}">
       </div>
       <div class="control-group">
         <label><span>${I18N.t('plasmaCurrent')}</span>: <span id="lbl-ip">${p.plasmaCurrent.toFixed(1)} MA</span></label>
-        <input type="range" id="slider-ip" min="0.4" max="3.0" step="0.1" value="${p.plasmaCurrent}">
+        <input type="range" id="slider-ip" min="0.4" max="${TOKAMAK_GEO.I_p * 1.5}" step="0.1" value="${p.plasmaCurrent}">
       </div>
     `;
 
@@ -410,11 +434,11 @@ const UI = {
       html += `
         <div class="control-group">
           <label><span>${I18N.t('pumpingSpeed')}</span>: <span id="lbl-pump">${p.pumpingSpeed.toFixed(1)} m³/s</span></label>
-          <input type="range" id="slider-pump" min="1" max="30" step="1" value="${p.pumpingSpeed}">
+          <input type="range" id="slider-pump" min="1" max="50" step="1" value="${p.pumpingSpeed}">
         </div>
         <div class="control-group">
           <label><span>${I18N.t('fluxExpansion')}</span>: <span id="lbl-fexp">${p.fluxExpansion.toFixed(1)}</span></label>
-          <input type="range" id="slider-fexp" min="2" max="10" step="0.5" value="${p.fluxExpansion}">
+          <input type="range" id="slider-fexp" min="2" max="12" step="0.5" value="${p.fluxExpansion}">
         </div>
       `;
     }
@@ -423,15 +447,15 @@ const UI = {
       html += `
         <div class="control-group">
           <label><span>${I18N.t('csFluxRate')}</span>: <span id="lbl-cs">${p.csFluxRate.toFixed(2)} V-s/s</span></label>
-          <input type="range" id="slider-cs" min="0" max="2.0" step="0.05" value="${p.csFluxRate}">
+          <input type="range" id="slider-cs" min="0" max="3.0" step="0.05" value="${p.csFluxRate}">
         </div>
         <div class="control-group">
           <label><span>${I18N.t('deltaShape')}</span>: <span id="lbl-delta">${p.triangularityDelta.toFixed(2)}</span></label>
-          <input type="range" id="slider-delta" min="0.1" max="0.6" step="0.02" value="${p.triangularityDelta}">
+          <input type="range" id="slider-delta" min="0.1" max="0.65" step="0.02" value="${p.triangularityDelta}">
         </div>
         <div class="control-group">
           <label><span>${I18N.t('neonSeeding')}</span>: <span id="lbl-neon">${p.neonSeeding.toFixed(1)}</span></label>
-          <input type="range" id="slider-neon" min="0" max="5.0" step="0.2" value="${p.neonSeeding}">
+          <input type="range" id="slider-neon" min="0" max="6.0" step="0.2" value="${p.neonSeeding}">
         </div>
       `;
     }
@@ -548,18 +572,9 @@ const UI = {
     }
 
     const steps = [
-      {
-        title: I18N.t('tutStep1Title'),
-        desc: I18N.t('tutStep1Desc')
-      },
-      {
-        title: I18N.t('tutStep2Title'),
-        desc: I18N.t('tutStep2Desc')
-      },
-      {
-        title: I18N.t('tutStep3Title'),
-        desc: I18N.t('tutStep3Desc')
-      }
+      { title: I18N.t('tutStep1Title'), desc: I18N.t('tutStep1Desc') },
+      { title: I18N.t('tutStep2Title'), desc: I18N.t('tutStep2Desc') },
+      { title: I18N.t('tutStep3Title'), desc: I18N.t('tutStep3Desc') }
     ];
 
     if (stepIndex >= steps.length) {
@@ -792,6 +807,7 @@ const UI = {
     this.dom.certModal.classList.add('hidden');
   },
 
+  // 4. 2D 磁平衡示波器 + 虛擬湯姆遜散射診斷 (Thomson Scattering)
   renderPoloidalFlux(shafranovShift, kappa, delta, deltaZ, now) {
     const ctx = this.dom.fluxCtx;
     const w = this.dom.fluxCanvas.width;
@@ -840,6 +856,28 @@ const UI = {
       }
       ctx.closePath();
       ctx.stroke();
+    }
+
+    // 博士模式疊加：虛擬湯姆遜散射徑向雷射測量散點 (Thomson Scattering Scatter Points)
+    if (FusionPhysics.gameMode === 2 && FusionPhysics.state.isOnline) {
+      const g = FusionPhysics.grid;
+      for (let i = 0; i < 9; i++) {
+        const sampleIdx = i * 2;
+        const rNorm = g.rho[sampleIdx];
+        const px = cx + (rNorm * 45);
+        const py = cy;
+        
+        ctx.fillStyle = '#f43f5e';
+        ctx.beginPath();
+        ctx.arc(px, py - (g.Te[sampleIdx] / 35.0) * 15, 1.8, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.strokeStyle = 'rgba(244, 63, 94, 0.4)';
+        ctx.beginPath();
+        ctx.moveTo(px, py - (g.Te[sampleIdx] / 35.0) * 15 - 3);
+        ctx.lineTo(px, py - (g.Te[sampleIdx] / 35.0) * 15 + 3);
+        ctx.stroke();
+      }
     }
 
     ctx.fillStyle = FusionPhysics.state.isOnline ? '#f43f5e' : '#64748b';
