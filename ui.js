@@ -9,7 +9,6 @@ const I18N = {
       dualTemp: '雙溫分離 (Te / Ti)',
       safetyFactor: '安全因子 q₉₅ / 歸一化 β_N',
       energyGain: '聚變能量增益 Q (P_fus/P_in)',
-      densityLimit: '密度極限 n/n_G',
       ecrhPower: '微波加熱 P_ECRH (→Te)',
       nbiPower: '中性束注入 P_NBI (→Ti)',
       toroidalField: '環向磁場 B_T',
@@ -29,7 +28,6 @@ const I18N = {
       dualTemp: 'Two-Fluid Temp (Te / Ti)',
       safetyFactor: 'Safety Factor q₉₅ / Norm β_N',
       energyGain: 'Fusion Gain Q (P_fus/P_in)',
-      densityLimit: 'Greenwald Limit n/n_G',
       ecrhPower: 'ECRH Heating P_ECRH (→Te)',
       nbiPower: 'NBI Heating P_NBI (→Ti)',
       toroidalField: 'Toroidal Field B_T',
@@ -62,14 +60,13 @@ const I18N = {
 
 const UIViewModel = {
   fromState(st) {
-    const isQUnstable = st.q95 < 2.0 || st.betaN > 2.8;
-    const isGreenwaldOver = st.greenwaldRatio > 1.0;
+    const isQUnstable = st.q95 < 2.0 || st.betaN > 2.8 || st.deltaZ > 0.25;
     const isIgnition = st.qGain >= 1.0;
     const maxT = Math.max(st.tempE0, st.tempI0);
     const scanlineSpeed = Math.max(6.0 - maxT * 0.25, 0.8).toFixed(2);
 
     let atmosphereBg = '';
-    if (maxT > 20.0) {
+    if (maxT > 20.0 || st.peakDivertorHeatFlux_MW_m2 > 10.0) {
       atmosphereBg = `radial-gradient(ellipse at 50% 55%, rgba(244, 63, 94, ${Math.min(0.05 + maxT * 0.003, 0.18)}) 0%, transparent 70%)`;
     } else if (isIgnition) {
       atmosphereBg = `radial-gradient(ellipse at 50% 55%, rgba(74, 222, 128, 0.12) 0%, transparent 70%)`;
@@ -84,14 +81,14 @@ const UIViewModel = {
       q95BetaColor: isQUnstable ? '#ef4444' : '#38bdf8',
       qText: st.qGain.toFixed(2),
       isIgnition,
-      greenwaldText: st.greenwaldRatio.toFixed(2),
-      greenwaldColor: isGreenwaldOver ? '#ef4444' : '#38bdf8',
+      divHeatText: `${st.peakDivertorHeatFlux_MW_m2.toFixed(1)} MW/m²`,
+      divHeatColor: st.peakDivertorHeatFlux_MW_m2 > 10.0 ? '#ef4444' : '#cbd5e1',
       integrityText: `${st.integrity.toFixed(1)}% [Max: ${st.maxIntegrity.toFixed(1)}%]`,
       integrityWidth: `${st.integrity}%`,
       integrityMaxWidth: `${st.maxIntegrity}%`,
       scanlineSpeed,
       atmosphereBg,
-      fluxInfoText: `κ: ${TOKAMAK_GEO.kappa} | Δ_Shaf: ${st.shafranovShift.toFixed(2)}m`
+      fluxInfoText: `κ: ${TOKAMAK_GEO.kappa} | δZ: ${st.deltaZ.toFixed(2)}m`
     };
   }
 };
@@ -100,6 +97,7 @@ const UI = {
   dom: {},
   lastUpdateTime: 0,
   updateIntervalMs: 50,
+  _toastTimer: null,
 
   init() {
     this.dom = {
@@ -107,7 +105,7 @@ const UI = {
       valTi: document.getElementById('val-ti'),
       valQ95Beta: document.getElementById('val-q95-beta'),
       valQ: document.getElementById('val-q'),
-      valGreenwald: document.getElementById('val-greenwald'),
+      valDivHeat: document.getElementById('val-div-heat'),
       integrityVal: document.getElementById('integrity-val'),
       integrityBar: document.getElementById('integrity-bar'),
       integrityMaxBar: document.getElementById('integrity-max-bar'),
@@ -171,19 +169,107 @@ const UI = {
     document.getElementById('btn-cool').onclick = () => GameController.purgeDivertor();
     this.dom.btnRestart.onclick = () => GameController.restartSimulation();
     this.dom.btnNextMission.onclick = () => {
-      MissionEngine.nextMission();
+      DynamicMissionEngine.reset();
       this.hideModals();
     };
   },
 
-  showIncidentReport(report) {
+  showSTLDiagnosis(diag) {
+    let toast = document.getElementById('stl-diag-toast');
+    if (!toast) {
+      toast = document.createElement('div');
+      toast.id = 'stl-diag-toast';
+      document.getElementById('ui-layer').appendChild(toast);
+    }
+
+    toast.innerHTML = `
+      <div class="toast-header">
+        <span>📐 3D 核心幾何診斷報告</span>
+        <b class="toast-rating">${diag.rating}</b>
+      </div>
+      <div class="toast-body">
+        <div>三角面數: <b>${diag.triangleCount}</b> | 湍流係數: <b>${diag.complexityFactor}x</b></div>
+        <div class="toast-stat">輸運影響: <span style="color:#ef4444">${diag.transportPenalty}</span></div>
+        <div class="toast-advice">${diag.advice}</div>
+      </div>
+    `;
+
+    toast.className = 'toast-show';
+    clearTimeout(this._toastTimer);
+    this._toastTimer = setTimeout(() => {
+      toast.className = 'toast-hide';
+    }, 6000);
+  },
+
+  showIncidentReport(report, telemetryHistory) {
     this.dom.reportCause.innerText = report.cause;
     this.dom.reportQ.innerText = report.q;
     this.dom.reportTemp.innerText = report.temp;
     this.dom.reportQ95.innerText = report.q95;
     this.dom.reportGreenwald.innerText = report.greenwald;
     this.dom.reportAdvice.innerText = report.advice;
+
+    this.renderTelemetryReplay(telemetryHistory, report.triggerMetric);
     this.dom.incidentModal.classList.remove('hidden');
+  },
+
+  renderTelemetryReplay(history, triggerMetric) {
+    const canvas = document.getElementById('telemetryCanvas');
+    if (!canvas || !history || history.length < 2) return;
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width;
+    const h = canvas.height;
+    ctx.clearRect(0, 0, w, h);
+
+    ctx.strokeStyle = '#1e293b';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, h * 0.3); ctx.lineTo(w, h * 0.3);
+    ctx.moveTo(0, h * 0.6); ctx.lineTo(w, h * 0.6);
+    ctx.stroke();
+
+    ctx.fillStyle = '#64748b';
+    ctx.font = '8px monospace';
+    ctx.fillText('β_N Limit (2.8)', 6, h * 0.3 - 3);
+    ctx.fillText('q95 Limit (2.0)', 6, h * 0.6 - 3);
+
+    const len = history.length;
+    const dx = w / (len - 1);
+
+    ctx.strokeStyle = '#ef4444';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (let i = 0; i < len; i++) {
+      const y = h - (history[i].betaN / 4.0) * (h - 24) - 12;
+      if (i === 0) ctx.moveTo(0, y);
+      else ctx.lineTo(i * dx, y);
+    }
+    ctx.stroke();
+
+    ctx.strokeStyle = '#38bdf8';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    for (let i = 0; i < len; i++) {
+      const y = h - (history[i].q95 / 5.0) * (h - 24) - 12;
+      if (i === 0) ctx.moveTo(0, y);
+      else ctx.lineTo(i * dx, y);
+    }
+    ctx.stroke();
+
+    const lastX = w - 4;
+    const lastY = h - (history[len - 1].betaN / 4.0) * (h - 24) - 12;
+    ctx.fillStyle = '#ef4444';
+    ctx.beginPath();
+    ctx.arc(lastX, lastY, 4.5, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.font = '10px monospace';
+    ctx.fillStyle = '#ef4444';
+    ctx.fillText('— β_N', 10, 12);
+    ctx.fillStyle = '#38bdf8';
+    ctx.fillText('— q95', 60, 12);
+    ctx.fillStyle = '#f59e0b';
+    ctx.fillText(`🚨 ${triggerMetric}`, w - 210, 12);
   },
 
   showVictoryModal(mission, rank) {
@@ -196,14 +282,14 @@ const UI = {
     this.dom.victoryModal.classList.add('hidden');
   },
 
-  renderPoloidalFlux(shafranovShift, kappa, delta) {
+  renderPoloidalFlux(shafranovShift, kappa, delta, deltaZ) {
     const ctx = this.dom.fluxCtx;
     const w = this.dom.fluxCanvas.width;
     const h = this.dom.fluxCanvas.height;
     ctx.clearRect(0, 0, w, h);
 
     const cx = w / 2;
-    const cy = h / 2;
+    const cy = h / 2 - (deltaZ * 25.0); // 垂直位移 δZ 同步偏轉
     const numSurfaces = 6;
 
     ctx.strokeStyle = '#334155';
@@ -212,7 +298,7 @@ const UI = {
     for (let a = 0; a <= Math.PI * 2; a += 0.1) {
       const rWall = 60;
       const x = cx + (rWall * Math.cos(a + delta * Math.sin(a)));
-      const y = cy + (rWall * kappa * Math.sin(a));
+      const y = (h / 2) + (rWall * kappa * Math.sin(a));
       if (a === 0) ctx.moveTo(x, y);
       else ctx.lineTo(x, y);
     }
@@ -245,7 +331,7 @@ const UI = {
   },
 
   updateHUD(st, now) {
-    this.renderPoloidalFlux(st.shafranovShift, TOKAMAK_GEO.kappa, TOKAMAK_GEO.delta);
+    this.renderPoloidalFlux(st.shafranovShift, TOKAMAK_GEO.kappa, TOKAMAK_GEO.delta, st.deltaZ);
 
     if (now && now - this.lastUpdateTime < this.updateIntervalMs) return;
     this.lastUpdateTime = now || performance.now();
@@ -259,8 +345,8 @@ const UI = {
     d.valQ95Beta.style.color = vm.q95BetaColor;
 
     d.valQ.innerText = vm.qText;
-    d.valGreenwald.innerText = vm.greenwaldText;
-    d.valGreenwald.style.color = vm.greenwaldColor;
+    d.valDivHeat.innerText = vm.divHeatText;
+    d.valDivHeat.style.color = vm.divHeatColor;
 
     d.integrityVal.innerText = vm.integrityText;
     d.integrityBar.style.width = vm.integrityWidth;
@@ -273,20 +359,20 @@ const UI = {
     d.scanlines.style.animationDuration = `${vm.scanlineSpeed}s`;
     d.atmosphere.style.background = vm.atmosphereBg;
 
-    // 更新生涯徽章
     d.careerRank.innerText = CareerManager.data.rank;
     d.careerStat.innerText = `Q_max: ${CareerManager.data.maxQ.toFixed(2)} | 存活: ${Math.floor(CareerManager.data.totalSurvivalSeconds)}s`;
 
-    // 更新任務目標 HUD
-    const m = MissionEngine.getCurrent();
-    const isZh = I18N.currentLang === 'zh';
-    d.missionName.innerText = isZh ? m.nameZh : m.nameEn;
-    d.missionDesc.innerText = isZh ? m.descZh : m.descEn;
-    const progressPct = (m.currentProgress / m.requiredDuration) * 100;
-    d.missionProgressBar.style.width = `${progressPct}%`;
-    const remainingTime = Math.max(0, m.timeLimit - MissionEngine.timer);
-    const mins = Math.floor(remainingTime / 60).toString().padStart(2, '0');
-    const secs = Math.floor(remainingTime % 60).toString().padStart(2, '0');
-    d.missionTimer.innerText = `${mins}:${secs}`;
+    const q = DynamicMissionEngine.currentQuest;
+    if (q) {
+      const isZh = I18N.currentLang === 'zh';
+      d.missionName.innerText = isZh ? q.titleZh : q.titleEn;
+      d.missionDesc.innerText = isZh ? q.descZh : q.descEn;
+      const progressPct = (q.currentProgress / q.targetDuration) * 100;
+      d.missionProgressBar.style.width = `${progressPct}%`;
+      const elapsed = Math.floor(DynamicMissionEngine.timer);
+      const mins = Math.floor(elapsed / 60).toString().padStart(2, '0');
+      const secs = Math.floor(elapsed % 60).toString().padStart(2, '0');
+      d.missionTimer.innerText = `${mins}:${secs}`;
+    }
   }
 };
