@@ -123,6 +123,7 @@ const UI = {
       labelHeatNbi: document.getElementById('label-heat-nbi'),
       labelMag: document.getElementById('label-mag'),
       labelIp: document.getElementById('label-ip'),
+      btnPower: document.getElementById('btn-power'),
       
       careerRank: document.getElementById('career-rank'),
       careerStat: document.getElementById('career-stat'),
@@ -147,6 +148,27 @@ const UI = {
 
     I18N.applyLanguage(this.dom);
     this.dom.btnLangToggle.onclick = () => I18N.toggleLanguage(this.dom);
+
+    // 🟢 主電源按鈕事件
+    if (this.dom.btnPower) {
+      this.dom.btnPower.onclick = () => {
+        const online = FusionPhysics.togglePower();
+        if (online) {
+          this.dom.btnPower.innerText = '🔴 系統主電源：運行中';
+          this.dom.btnPower.style.background = 'linear-gradient(135deg, #ef4444, #991b1b)';
+          this.dom.btnPower.style.boxShadow = '0 0 15px rgba(239, 68, 68, 0.6)';
+          document.getElementById('slider-heat-ecrh').value = 10;
+          document.getElementById('slider-heat-nbi').value = 10;
+          this.dom.labelHeatEcrh.innerText = '10.0 MW';
+          this.dom.labelHeatNbi.innerText = '10.0 MW';
+          AudioSys.playTone(520, 'sine', 0.4, 0.1);
+        } else {
+          this.dom.btnPower.innerText = '🟢 系統主電源：待機中';
+          this.dom.btnPower.style.background = 'linear-gradient(135deg, #10b981, #047857)';
+          this.dom.btnPower.style.boxShadow = '0 0 15px rgba(16, 185, 129, 0.4)';
+        }
+      };
+    }
 
     document.getElementById('slider-heat-ecrh').oninput = (e) => {
       FusionPhysics.state.heatECRH = parseFloat(e.target.value);
@@ -289,7 +311,7 @@ const UI = {
     ctx.clearRect(0, 0, w, h);
 
     const cx = w / 2;
-    const cy = h / 2 - (deltaZ * 25.0); // 垂直位移 δZ 同步偏轉
+    const cy = h / 2 - (deltaZ * 25.0);
     const numSurfaces = 6;
 
     ctx.strokeStyle = '#334155';
