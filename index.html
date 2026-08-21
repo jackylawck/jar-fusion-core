@@ -6,11 +6,8 @@
   <title>J.A.R. 聚變核心 3D (Joint Advanced Reactor Fusion Core 3D)</title>
   <link rel="stylesheet" href="style.css">
   
-  <!-- Three.js 核心與控制器 -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
-  
-  <!-- 3A 級 UnrealBloom 後處理管線組件 -->
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/EffectComposer.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
@@ -20,13 +17,9 @@
 </head>
 <body>
 
-  <!-- 3D WebGL 畫布容器 -->
+  <!-- 3D 畫布與背景層 -->
   <div id="canvas-container"></div>
-
-  <!-- 3A 全球環境光暈層 (Ambient Atmosphere Glow) -->
   <div id="atmosphere-glow"></div>
-
-  <!-- 3A 動態全息掃描線與經緯光柵 -->
   <div id="scanlines"></div>
 
   <!-- 維修長按 HUD 環 -->
@@ -39,12 +32,12 @@
   </div>
 
   <div id="ui-layer">
-    <!-- 頂部：第一壁材料狀態 + 語言切換按鈕 + 實時警報 -->
+    <!-- 頂部欄：材料狀態 + 生涯成就 + 語言按鈕 -->
     <div id="top-bar">
       <div id="top-header-row">
         <div id="integrity-container">
           <div class="bar-header">
-            <span id="label-wall-integrity" data-i18n="wallIntegrity">第一壁材料狀態 (First Wall Integrity)</span>
+            <span id="label-wall-integrity" data-i18n="wallIntegrity">第一壁材料狀態</span>
             <span id="integrity-val">100.0% [Max: 100%]</span>
           </div>
           <div class="bar-bg">
@@ -52,19 +45,36 @@
             <div id="integrity-bar"></div>
           </div>
         </div>
+        <div id="career-badge">
+          <span class="career-title" id="career-rank">實習操作員</span>
+          <span class="career-stat" id="career-stat">Q_max: 0.00 | 存活: 0s</span>
+        </div>
         <button id="btn-lang-toggle" class="btn-lang">English</button>
       </div>
       <div id="alert-msg"></div>
     </div>
 
-    <!-- 左側 2D 磁通量表面示波器 -->
+    <!-- 右上角任務目標 HUD -->
+    <div id="mission-hud">
+      <div class="mission-header">
+        <span class="mission-tag">MISSION ACTIVE</span>
+        <span id="mission-timer">00:45</span>
+      </div>
+      <div class="mission-name" id="mission-name">任務 1：為深空基地供電</div>
+      <div class="mission-desc" id="mission-desc">維持 Q ≥ 1.05 超過 20 秒</div>
+      <div class="mission-progress-bar-bg">
+        <div id="mission-progress-bar"></div>
+      </div>
+    </div>
+
+    <!-- 左側 2D 磁通量示波器 -->
     <div id="flux-monitor">
       <div class="monitor-title" data-i18n="poloidalFlux">極向磁通量表面 Ψ(R,Z)</div>
       <canvas id="fluxCanvas" width="160" height="200"></canvas>
       <div class="monitor-foot" id="flux-info">κ: 1.75 | Δ_Shaf: 0.08m</div>
     </div>
 
-    <!-- 中部 3A 級 3+1 HUD (34px 全息投影級視覺錨點) -->
+    <!-- 中部 3A 級 3+1 HUD -->
     <div id="hud">
       <div class="hud-card hud-card-core">
         <div class="hud-title" data-i18n="dualTemp">雙溫分離 (Te / Ti)</div>
@@ -114,7 +124,53 @@
     </div>
   </div>
 
+  <!-- 事故歸因分析報告 (Incident Report Modal) -->
+  <div id="incident-modal" class="modal-overlay hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <span class="modal-icon">🚨</span>
+        <span class="modal-title" data-i18n="incidentTitle">事故黑盒子歸因診斷</span>
+      </div>
+      <div class="modal-body">
+        <div class="report-section">
+          <div class="report-label" data-i18n="primaryCause">主因判定</div>
+          <div class="report-value" id="report-cause">Troyon β_N 磁流體壓力極限突破</div>
+        </div>
+        <div class="report-grid">
+          <div class="grid-item"><span>突破時 Q 值</span><b id="report-q">1.24</b></div>
+          <div class="grid-item"><span>等離子體溫度</span><b id="report-temp">28.4 keV</b></div>
+          <div class="grid-item"><span>安全因子 q95</span><b id="report-q95">1.82</b></div>
+          <div class="grid-item"><span>密度比 n/nG</span><b id="report-greenwald">1.12</b></div>
+        </div>
+        <div class="report-section advice-box">
+          <div class="report-label" data-i18n="tacticalAdvice">首席工程師建議</div>
+          <div class="report-advice" id="report-advice">下次提高加熱功率前，請優先提高環向磁場 B_T 或適度進行偏濾器排氣。</div>
+        </div>
+      </div>
+      <button class="btn-restart" id="btn-restart" data-i18n="restartCore">重啟反應爐循環</button>
+    </div>
+  </div>
+
+  <!-- 任務成功勝利結算 (Mission Clear Modal) -->
+  <div id="victory-modal" class="modal-overlay hidden">
+    <div class="modal-card victory-card">
+      <div class="modal-header">
+        <span class="modal-icon">⚡</span>
+        <span class="modal-title">任務圓滿達成 (MISSION SUCCESS)</span>
+      </div>
+      <div class="modal-body">
+        <p id="victory-text">深空基地電網已成功接入聚變核心，能量輸出穩定！</p>
+        <div class="victory-unlock">
+          <span>解鎖階級：</span><b id="victory-rank">托卡馬克資深工程師</b>
+        </div>
+      </div>
+      <button class="btn-next-mission" id="btn-next-mission">進入下一階段挑戰</button>
+    </div>
+  </div>
+
   <script src="physics.js"></script>
+  <script src="audio.js"></script>
+  <script src="controller.js"></script>
   <script src="ui.js"></script>
   <script src="main.js"></script>
 </body>
