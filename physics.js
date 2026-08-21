@@ -1,93 +1,3 @@
-class SoundDirector {
-  constructor() {
-    this.ctx = null;
-    this.humOsc = null;
-    this.humGain = null;
-    this.isIgnited = false;
-  }
-
-  init() {
-    if (this.ctx) return;
-    this.ctx = new (window.AudioContext || window.webkitAudioContext)();
-    this.humOsc = this.ctx.createOscillator();
-    this.humGain = this.ctx.createGain();
-    this.humOsc.type = 'triangle';
-    this.humOsc.frequency.setValueAtTime(50, this.ctx.currentTime);
-    this.humGain.gain.setValueAtTime(0.01, this.ctx.currentTime);
-    this.humOsc.connect(this.humGain);
-    this.humGain.connect(this.ctx.destination);
-    this.humOsc.start();
-  }
-
-  updateHum(magField, isDistorted) {
-    if (!this.ctx) return;
-    const targetFreq = 40 + magField * 3.5;
-    this.humOsc.frequency.setTargetAtTime(targetFreq, this.ctx.currentTime, 0.1);
-    const targetGain = isDistorted ? 0.09 : 0.025;
-    this.humGain.gain.setTargetAtTime(targetGain, this.ctx.currentTime, 0.1);
-  }
-
-  playELMBurst() {
-    if (!this.ctx) return;
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-    osc.type = 'sawtooth';
-    osc.frequency.setValueAtTime(320, this.ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(60, this.ctx.currentTime + 0.12);
-    gain.gain.setValueAtTime(0.1, this.ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.12);
-    osc.connect(gain);
-    gain.connect(this.ctx.destination);
-    osc.start();
-    osc.stop(this.ctx.currentTime + 0.12);
-  }
-
-  playRepairWelding() {
-    if (!this.ctx) return;
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-    osc.type = 'sawtooth';
-    osc.frequency.setValueAtTime(1100 + Math.random() * 500, this.ctx.currentTime);
-    gain.gain.setValueAtTime(0.03, this.ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.05);
-    osc.connect(gain);
-    gain.connect(this.ctx.destination);
-    osc.start();
-    osc.stop(this.ctx.currentTime + 0.05);
-  }
-
-  playIgnitionRiser() {
-    if (!this.ctx || this.isIgnited) return;
-    this.isIgnited = true;
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(180, this.ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(800, this.ctx.currentTime + 1.2);
-    gain.gain.setValueAtTime(0.12, this.ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 1.4);
-    osc.connect(gain);
-    gain.connect(this.ctx.destination);
-    osc.start();
-    osc.stop(this.ctx.currentTime + 1.4);
-  }
-
-  playBeep(freq = 440, type = 'sine', duration = 0.1) {
-    if (!this.ctx) return;
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-    osc.type = type;
-    osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
-    gain.gain.setValueAtTime(0.08, this.ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + duration);
-    osc.connect(gain);
-    gain.connect(this.ctx.destination);
-    osc.start();
-    osc.stop(this.ctx.currentTime + duration);
-  }
-}
-
-const AudioSys = new SoundDirector();
 const COILS_COUNT = 10;
 
 const TOKAMAK_GEO = {
@@ -98,6 +8,7 @@ const TOKAMAK_GEO = {
   volume: 20.5
 };
 
+// Bosch-Hale (1992) D-T 聚變截面參數化模型
 function getBoschHaleSigmaV(Ti_keV) {
   if (Ti_keV < 0.2) return 0;
   if (Ti_keV > 100) Ti_keV = 100;
@@ -112,12 +23,12 @@ function getBoschHaleSigmaV(Ti_keV) {
   return isNaN(sigV) ? 0 : sigV;
 }
 
+// 1.5D 徑向拋物線剖面多層殼積分
 function computeTwoFluidRadialIntegrals(Te0, Ti0, n0, alphaT, alphaN) {
   const NUM_SHELLS = 16;
   const dr = 1.0 / NUM_SHELLS;
   let totalFusionPower_MW = 0;
   let avgTe = 0, avgTi = 0, avgN = 0;
-
   const E_fus_J = 17.6 * 1.60218e-13;
 
   for (let i = 0; i < NUM_SHELLS; i++) {
@@ -128,7 +39,6 @@ function computeTwoFluidRadialIntegrals(Te0, Ti0, n0, alphaT, alphaN) {
 
     const sigV = getBoschHaleSigmaV(Ti_r);
     const n_SI = nr * 1e20;
-    
     const shellVol = 4.0 * Math.pow(Math.PI, 2) * TOKAMAK_GEO.R0 * Math.pow(TOKAMAK_GEO.a, 2) * TOKAMAK_GEO.kappa * rho * dr;
     const pLocal_W = 0.25 * Math.pow(n_SI, 2) * sigV * E_fus_J * shellVol;
     
@@ -200,7 +110,6 @@ const FusionPhysics = {
     const pLoss_i = thermalE_i_MJ / Math.max(tau_E, 0.02);
 
     const heatCap_MJ_per_keV = 1.5 * (n0 * 1e20) * 1.60218e-16 * geo.volume / 1e6;
-    
     const netPower_e = s.heatECRH + (0.5 * pAlpha) - pBrem - pSync - q_ei_MW - pLoss_e;
     const dTe0_dt = netPower_e / heatCap_MJ_per_keV;
 
@@ -217,16 +126,10 @@ const FusionPhysics = {
 
     const subSteps = 4;
     const subDt = dt / subSteps;
-
-    let finalFusion = 0;
-    let finalAvgTe = 0, finalAvgTi = 0, finalAvgN = 0;
-    let hModeState = false;
+    let finalFusion = 0, finalAvgTe = 0, finalAvgTi = 0, finalAvgN = 0, hModeState = false;
 
     for (let step = 0; step < subSteps; step++) {
-      const Te = s.tempE0;
-      const Ti = s.tempI0;
-      const n = s.density0;
-
+      const Te = s.tempE0, Ti = s.tempI0, n = s.density0;
       const k1 = this.getDerivatives(Te, Ti, n);
       const k2 = this.getDerivatives(Te + 0.5 * subDt * k1.dTe0_dt, Ti + 0.5 * subDt * k1.dTi0_dt, n);
       const k3 = this.getDerivatives(Te + 0.5 * subDt * k2.dTe0_dt, Ti + 0.5 * subDt * k2.dTi0_dt, n);
@@ -234,7 +137,6 @@ const FusionPhysics = {
 
       s.tempE0 += (subDt / 6.0) * (k1.dTe0_dt + 2 * k2.dTe0_dt + 2 * k3.dTe0_dt + k4.dTe0_dt);
       s.tempI0 += (subDt / 6.0) * (k1.dTi0_dt + 2 * k2.dTi0_dt + 2 * k3.dTi0_dt + k4.dTi0_dt);
-
       s.tempE0 = Math.max(s.tempE0, 0.2);
       s.tempI0 = Math.max(s.tempI0, 0.2);
 
@@ -249,12 +151,10 @@ const FusionPhysics = {
     s.isHMode = hModeState;
     const pTotalIn = s.heatECRH + s.heatNBI;
     s.qGain = pTotalIn > 0 ? (s.pFusion / pTotalIn) : 0;
-
     s.density0 = Math.max(s.density0 - 0.015 * dt, 0.15);
 
     const shapeFactor = (1 + Math.pow(geo.kappa, 2)) / 2.0;
     s.q95 = (5.0 * Math.pow(geo.a, 2) * s.magField / (geo.R0 * s.plasmaCurrent)) * shapeFactor;
-
     const n_Greenwald = s.plasmaCurrent / (Math.PI * Math.pow(geo.a, 2));
     s.greenwaldRatio = s.density0 / n_Greenwald;
 
@@ -262,14 +162,12 @@ const FusionPhysics = {
     const bPressure_Pa = Math.pow(s.magField, 2) / (2 * 4 * Math.PI * 1e-7);
     const beta_t_percent = (pAvg_Pa / bPressure_Pa) * 100.0;
     s.betaN = beta_t_percent * (geo.a * s.magField / s.plasmaCurrent);
-
     const beta_p = beta_t_percent * Math.pow(s.q95, 2);
     s.shafranovShift = (Math.pow(geo.a, 2) / (2 * geo.R0)) * Math.min(beta_p * 0.1 + 0.5, 2.5);
 
     s.elmBurst = false;
     if (s.isHMode && s.betaN > 2.8 && Math.random() < 0.08) {
       s.elmBurst = true;
-      AudioSys.playELMBurst();
     }
 
     const isUnstable = (s.q95 < 2.0) || (s.greenwaldRatio > 1.0) || (s.betaN > 3.5);
@@ -277,7 +175,6 @@ const FusionPhysics = {
       s.kinkTimer += dt;
       if (s.kinkTimer > 0.4 && s.failingCoilIndex === -1) {
         s.failingCoilIndex = Math.floor(Math.random() * COILS_COUNT);
-        AudioSys.playBeep(130, 'sawtooth', 0.4);
       }
     } else {
       s.kinkTimer = Math.max(s.kinkTimer - dt, 0);
@@ -296,32 +193,26 @@ const FusionPhysics = {
       s.integrity = Math.max(s.integrity - deltaDmg, 0);
       s.maxIntegrity = Math.max(s.maxIntegrity - deltaDmg * 0.10, 0);
       s.integrity = Math.min(s.integrity, s.maxIntegrity);
-      if (s.integrity <= 0) s.gameOver = true;
+      if (s.integrity <= 0) {
+        s.gameOver = true;
+      }
     } else {
       s.integrity = Math.min(s.integrity + 1.5 * dt, s.maxIntegrity);
     }
-
-    if (s.qGain >= 1.0 && !AudioSys.isIgnited) AudioSys.playIgnitionRiser();
-    else if (s.qGain < 0.8) AudioSys.isIgnited = false;
-
-    AudioSys.updateHum(s.magField, s.kinkDistortion > 0.3);
   },
 
   injectPellet() {
     this.state.density0 = Math.min(this.state.density0 + 0.35, 3.5);
-    AudioSys.playBeep(650, 'triangle', 0.08);
   },
 
   purgeDivertor() {
     this.state.tempE0 = Math.max(this.state.tempE0 - 3.5, 0.5);
     this.state.tempI0 = Math.max(this.state.tempI0 - 3.5, 0.5);
-    AudioSys.playBeep(200, 'sine', 0.25);
   },
 
   repairCoil(index) {
     if (this.state.failingCoilIndex === index) {
       this.state.failingCoilIndex = -1;
-      AudioSys.playBeep(920, 'square', 0.18);
     }
   }
 };
