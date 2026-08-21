@@ -1,5 +1,5 @@
 // =========================================================================
-// J.A.R. 聚變核心 3D - 國際化介面與視圖渲染 (ui.js v8.3)
+// J.A.R. 聚變核心 3D - 介面控制器 (ui.js v9.0)
 // =========================================================================
 
 const I18N = {
@@ -14,22 +14,28 @@ const I18N = {
       safetyFactor: '安全因子 q₉₅ / 歸一化 β_N',
       energyGain: '聚變能量增益 Q (P_fus/P_in)',
       solHeatLabel: 'SOL 靶板熱流 / 密度極限',
-      ecrhPower: '微波加熱 P_ECRH (→Te)',
-      nbiPower: '中性束注入 P_NBI (→Ti)',
+      ecrhPower: '微波加熱 P_ECRH',
+      nbiPower: '中性束注入 P_NBI',
       toroidalField: '環向磁場 B_T',
       plasmaCurrent: '等離子體電流 I_p',
+      pumpingSpeed: '偏濾器抽速 S_pump',
+      fluxExpansion: '磁通擴展比 f_exp',
+      csFluxRate: '中心螺線管磁通率 dPhi/dt',
+      deltaShape: '三角形形變度 delta',
+      neonSeeding: '氖氣雜質冷卻注入',
       injectFuel: '注入 D-T 燃料顆粒',
       divertorPurge: '開啟偏濾器排熱',
       loadStl: '📁 載入 3D 打印 STL 核心',
       repairing: '正在修復線圈',
       incidentTitle: '事故黑盒子歸因診斷 (Incident Report)',
       primaryCause: '主因判定',
-      tacticalAdvice: '首席工程師建議',
-      restartCore: '重啟反應爐 (回到待機)',
+      tacticalAdvice: '國家能源研究院專家建議',
+      restartCore: '重啟反應爐 (回到安全待機)',
       powerStandby: '🟢 系統主電源：待機中',
       powerRunning: '🔴 系統主電源：運行中',
-      modeStandard: '標準模式',
-      modeAdvanced: '科研模式',
+      modeEasy: '簡易科普模式 (必穩定)',
+      modeStandard: '工程標準模式 (6參數)',
+      modeAdvanced: '博士科研模式 (9參數)',
       hideHud: '精簡視圖',
       showHud: '完整儀表',
       missionActive: 'MISSION ACTIVE',
@@ -40,7 +46,7 @@ const I18N = {
       telemetryTitle: '破裂前 5 秒黑盒子時序回放 (TELEMETRY HISTORY)',
       victoryTitle: '任務圓滿達成 (MISSION SUCCESS)',
       victoryDesc: '深空基地電網已成功接入聚變核心，能量輸出穩定！',
-      unlockRank: '解鎖階級：',
+      unlockRank: '解鎖國家級官銜：',
       nextMission: '進入下一階段挑戰',
       diagTitle: '📐 3D 核心幾何診斷報告',
       diagTris: '三角面數',
@@ -57,22 +63,28 @@ const I18N = {
       safetyFactor: 'Safety Factor q₉₅ / Norm β_N',
       energyGain: 'Fusion Gain Q (P_fus/P_in)',
       solHeatLabel: 'SOL Heatflux / Density Limit',
-      ecrhPower: 'ECRH Heating P_ECRH (→Te)',
-      nbiPower: 'NBI Heating P_NBI (→Ti)',
+      ecrhPower: 'ECRH Heating P_ECRH',
+      nbiPower: 'NBI Heating P_NBI',
       toroidalField: 'Toroidal Field B_T',
       plasmaCurrent: 'Plasma Current I_p',
+      pumpingSpeed: 'Divertor Pump Speed',
+      fluxExpansion: 'Flux Expansion f_exp',
+      csFluxRate: 'CS Loop Flux dPhi/dt',
+      deltaShape: 'Triangularity delta',
+      neonSeeding: 'Neon Gas Seeding',
       injectFuel: 'Inject D-T Fuel Pellet',
       divertorPurge: 'Purge Divertor Exhaust',
       loadStl: '📁 Load 3D Print STL Core',
       repairing: 'REPAIRING COIL',
       incidentTitle: 'Incident Black Box Diagnostic',
       primaryCause: 'PRIMARY CAUSE',
-      tacticalAdvice: 'CHIEF ENGINEER ADVICE',
+      tacticalAdvice: 'NATIONAL ACADEMY ADVICE',
       restartCore: 'RESTART REACTOR (STANDBY)',
       powerStandby: '🟢 CORE POWER: STANDBY',
       powerRunning: '🔴 CORE POWER: ONLINE',
-      modeStandard: 'STANDARD',
-      modeAdvanced: 'RESEARCH',
+      modeEasy: 'EASY (STABLE)',
+      modeStandard: 'STANDARD (6 PARAMS)',
+      modeAdvanced: 'RESEARCH (9 PARAMS)',
       hideHud: 'HIDE HUD',
       showHud: 'SHOW HUD',
       missionActive: 'MISSION ACTIVE',
@@ -105,12 +117,31 @@ const I18N = {
     if (dom && dom.btnPower) {
       dom.btnPower.innerText = FusionPhysics.state.isOnline ? this.t('powerRunning') : this.t('powerStandby');
     }
+    this.updateModeButtonText(dom);
     CareerManager.updateRank();
   },
 
   toggleLanguage(dom) {
     this.currentLang = this.currentLang === 'zh' ? 'en' : 'zh';
     this.applyLanguage(dom);
+  },
+
+  updateModeButtonText(dom) {
+    if (!dom.btnModeToggle) return;
+    const mode = FusionPhysics.gameMode;
+    if (mode === 0) {
+      dom.btnModeToggle.innerHTML = `🟢 <span>${this.t('modeEasy')}</span>`;
+      dom.btnModeToggle.style.borderColor = '#10b981';
+      dom.btnModeToggle.style.color = '#10b981';
+    } else if (mode === 1) {
+      dom.btnModeToggle.innerHTML = `🟡 <span>${this.t('modeStandard')}</span>`;
+      dom.btnModeToggle.style.borderColor = '#f59e0b';
+      dom.btnModeToggle.style.color = '#f59e0b';
+    } else {
+      dom.btnModeToggle.innerHTML = `🔴 <span>${this.t('modeAdvanced')}</span>`;
+      dom.btnModeToggle.style.borderColor = '#ef4444';
+      dom.btnModeToggle.style.color = '#ef4444';
+    }
   }
 };
 
@@ -178,10 +209,7 @@ const UI = {
       btnLangToggle: document.getElementById('btn-lang-toggle'),
       btnModeToggle: document.getElementById('btn-mode-toggle'),
       btnHudToggle: document.getElementById('btn-hud-toggle'),
-      labelHeatEcrh: document.getElementById('label-heat-ecrh'),
-      labelHeatNbi: document.getElementById('label-heat-nbi'),
-      labelMag: document.getElementById('label-mag'),
-      labelIp: document.getElementById('label-ip'),
+      controlsPanel: document.getElementById('controls-panel'),
       btnPower: document.getElementById('btn-power'),
       hudArea: document.getElementById('hud'),
       
@@ -207,9 +235,10 @@ const UI = {
     };
 
     I18N.applyLanguage(this.dom);
+    this.renderDynamicControlSliders();
+
     this.dom.btnLangToggle.onclick = () => I18N.toggleLanguage(this.dom);
 
-    // 🟢 主電源按鈕
     if (this.dom.btnPower) {
       this.dom.btnPower.onclick = () => {
         const online = FusionPhysics.togglePower();
@@ -217,10 +246,7 @@ const UI = {
           this.dom.btnPower.innerText = I18N.t('powerRunning');
           this.dom.btnPower.style.background = 'linear-gradient(135deg, #ef4444, #991b1b)';
           this.dom.btnPower.style.boxShadow = '0 0 15px rgba(239, 68, 68, 0.6)';
-          document.getElementById('slider-heat-ecrh').value = 12;
-          document.getElementById('slider-heat-nbi').value = 12;
-          this.dom.labelHeatEcrh.innerText = '12.0 MW';
-          this.dom.labelHeatNbi.innerText = '12.0 MW';
+          this.syncSlidersFromPhysics();
           AudioSys.playTone(520, 'sine', 0.4, 0.1);
         } else {
           this.resetControlsToStandby();
@@ -228,17 +254,14 @@ const UI = {
       };
     }
 
-    // 模式切換 (標準 vs 科研)
     if (this.dom.btnModeToggle) {
       this.dom.btnModeToggle.onclick = () => {
-        const isAdv = FusionPhysics.toggleMode();
-        this.dom.btnModeToggle.innerHTML = isAdv ? `🔥 ${I18N.t('modeAdvanced')}` : `🟢 ${I18N.t('modeStandard')}`;
-        this.dom.btnModeToggle.style.borderColor = isAdv ? '#ef4444' : '#00f0ff';
-        this.dom.btnModeToggle.style.color = isAdv ? '#ef4444' : '#00f0ff';
+        FusionPhysics.cycleGameMode();
+        I18N.updateModeButtonText(this.dom);
+        this.renderDynamicControlSliders();
       };
     }
 
-    // HUD 折疊視圖切換
     if (this.dom.btnHudToggle) {
       this.dom.btnHudToggle.onclick = () => {
         this.isHudHidden = !this.isHudHidden;
@@ -246,23 +269,6 @@ const UI = {
         this.dom.btnHudToggle.innerHTML = this.isHudHidden ? `👁️ ${I18N.t('showHud')}` : `👁️ ${I18N.t('hideHud')}`;
       };
     }
-
-    document.getElementById('slider-heat-ecrh').oninput = (e) => {
-      FusionPhysics.state.heatECRH = parseFloat(e.target.value);
-      this.dom.labelHeatEcrh.innerText = `${FusionPhysics.state.heatECRH.toFixed(1)} MW`;
-    };
-    document.getElementById('slider-heat-nbi').oninput = (e) => {
-      FusionPhysics.state.heatNBI = parseFloat(e.target.value);
-      this.dom.labelHeatNbi.innerText = `${FusionPhysics.state.heatNBI.toFixed(1)} MW`;
-    };
-    document.getElementById('slider-mag').oninput = (e) => {
-      FusionPhysics.state.magField = parseFloat(e.target.value);
-      this.dom.labelMag.innerText = `${FusionPhysics.state.magField.toFixed(1)} T`;
-    };
-    document.getElementById('slider-ip').oninput = (e) => {
-      FusionPhysics.state.plasmaCurrent = parseFloat(e.target.value);
-      this.dom.labelIp.innerText = `${FusionPhysics.state.plasmaCurrent.toFixed(1)} MA`;
-    };
 
     document.getElementById('btn-fuel').onclick = () => GameController.injectPellet();
     document.getElementById('btn-cool').onclick = () => GameController.purgeDivertor();
@@ -273,16 +279,147 @@ const UI = {
     };
   },
 
-  resetControlsToStandby() {
-    if (this.dom.btnPower) {
-      this.dom.btnPower.innerText = I18N.t('powerStandby');
-      this.dom.btnPower.style.background = 'linear-gradient(135deg, #10b981, #047857)';
-      this.dom.btnPower.style.boxShadow = '0 0 12px rgba(16, 185, 129, 0.4)';
+  // 依據難度模式動態生成 4 / 6 / 9 個滑塊
+  renderDynamicControlSliders() {
+    const mode = FusionPhysics.gameMode;
+    const p = FusionPhysics.state;
+    const cp = this.dom.controlsPanel;
+
+    let html = `
+      <div class="control-group">
+        <label><span>${I18N.t('ecrhPower')}</span>: <span id="lbl-ecrh">${p.heatECRH.toFixed(1)} MW</span></label>
+        <input type="range" id="slider-heat-ecrh" min="0" max="40" step="0.5" value="${p.heatECRH}">
+      </div>
+      <div class="control-group">
+        <label><span>${I18N.t('nbiPower')}</span>: <span id="lbl-nbi">${p.heatNBI.toFixed(1)} MW</span></label>
+        <input type="range" id="slider-heat-nbi" min="0" max="40" step="0.5" value="${p.heatNBI}">
+      </div>
+      <div class="control-group">
+        <label><span>${I18N.t('toroidalField')}</span>: <span id="lbl-mag">${p.magField.toFixed(1)} T</span></label>
+        <input type="range" id="slider-mag" min="2" max="15" step="0.2" value="${p.magField}">
+      </div>
+      <div class="control-group">
+        <label><span>${I18N.t('plasmaCurrent')}</span>: <span id="lbl-ip">${p.plasmaCurrent.toFixed(1)} MA</span></label>
+        <input type="range" id="slider-ip" min="0.4" max="3.0" step="0.1" value="${p.plasmaCurrent}">
+      </div>
+    `;
+
+    if (mode >= 1) {
+      html += `
+        <div class="control-group">
+          <label><span>${I18N.t('pumpingSpeed')}</span>: <span id="lbl-pump">${p.pumpingSpeed.toFixed(1)} m³/s</span></label>
+          <input type="range" id="slider-pump" min="1" max="30" step="1" value="${p.pumpingSpeed}">
+        </div>
+        <div class="control-group">
+          <label><span>${I18N.t('fluxExpansion')}</span>: <span id="lbl-fexp">${p.fluxExpansion.toFixed(1)}</span></label>
+          <input type="range" id="slider-fexp" min="2" max="10" step="0.5" value="${p.fluxExpansion}">
+        </div>
+      `;
     }
-    document.getElementById('slider-heat-ecrh').value = 0;
-    document.getElementById('slider-heat-nbi').value = 0;
-    this.dom.labelHeatEcrh.innerText = '0.0 MW';
-    this.dom.labelHeatNbi.innerText = '0.0 MW';
+
+    if (mode === 2) {
+      html += `
+        <div class="control-group">
+          <label><span>${I18N.t('csFluxRate')}</span>: <span id="lbl-cs">${p.csFluxRate.toFixed(2)} V-s/s</span></label>
+          <input type="range" id="slider-cs" min="0" max="2.0" step="0.05" value="${p.csFluxRate}">
+        </div>
+        <div class="control-group">
+          <label><span>${I18N.t('deltaShape')}</span>: <span id="lbl-delta">${p.triangularityDelta.toFixed(2)}</span></label>
+          <input type="range" id="slider-delta" min="0.1" max="0.6" step="0.02" value="${p.triangularityDelta}">
+        </div>
+        <div class="control-group">
+          <label><span>${I18N.t('neonSeeding')}</span>: <span id="lbl-neon">${p.neonSeeding.toFixed(1)}</span></label>
+          <input type="range" id="slider-neon" min="0" max="5.0" step="0.2" value="${p.neonSeeding}">
+        </div>
+      `;
+    }
+
+    html += `
+      <div class="btn-row">
+        <button class="btn-power" id="btn-power">${p.isOnline ? I18N.t('powerRunning') : I18N.t('powerStandby')}</button>
+        <button class="btn-fuel" id="btn-fuel">${I18N.t('injectFuel')}</button>
+        <button class="btn-divertor" id="btn-cool">${I18N.t('divertorPurge')}</button>
+        <button class="btn-stl" id="btn-load-stl">${I18N.t('loadStl')}</button>
+        <input type="file" id="stl-file-input" accept=".stl" style="display:none;">
+      </div>
+    `;
+
+    cp.innerHTML = html;
+    this.bindDynamicSliderEvents();
+  },
+
+  bindDynamicSliderEvents() {
+    const bind = (id, lblId, prop, unit) => {
+      const el = document.getElementById(id);
+      if (el) {
+        el.oninput = (e) => {
+          FusionPhysics.state[prop] = parseFloat(e.target.value);
+          document.getElementById(lblId).innerText = `${FusionPhysics.state[prop].toFixed(1)} ${unit}`;
+        };
+      }
+    };
+
+    bind('slider-heat-ecrh', 'lbl-ecrh', 'heatECRH', 'MW');
+    bind('slider-heat-nbi', 'lbl-nbi', 'heatNBI', 'MW');
+    bind('slider-mag', 'lbl-mag', 'magField', 'T');
+    bind('slider-ip', 'lbl-ip', 'plasmaCurrent', 'MA');
+    bind('slider-pump', 'lbl-pump', 'pumpingSpeed', 'm³/s');
+    bind('slider-fexp', 'lbl-fexp', 'fluxExpansion', '');
+    bind('slider-cs', 'lbl-cs', 'csFluxRate', 'V-s/s');
+    bind('slider-delta', 'lbl-delta', 'triangularityDelta', '');
+    bind('slider-neon', 'lbl-neon', 'neonSeeding', '');
+
+    const bp = document.getElementById('btn-power');
+    if (bp) {
+      bp.onclick = () => {
+        const online = FusionPhysics.togglePower();
+        if (online) {
+          bp.innerText = I18N.t('powerRunning');
+          bp.style.background = 'linear-gradient(135deg, #ef4444, #991b1b)';
+          this.syncSlidersFromPhysics();
+          AudioSys.playTone(520, 'sine', 0.4, 0.1);
+        } else {
+          this.resetControlsToStandby();
+        }
+      };
+    }
+
+    const bStl = document.getElementById('btn-load-stl');
+    const sInput = document.getElementById('stl-file-input');
+    if (bStl && sInput) bStl.onclick = () => sInput.click();
+    document.getElementById('btn-fuel').onclick = () => GameController.injectPellet();
+    document.getElementById('btn-cool').onclick = () => GameController.purgeDivertor();
+  },
+
+  syncSlidersFromPhysics() {
+    const p = FusionPhysics.state;
+    const setVal = (id, lblId, val, unit) => {
+      const el = document.getElementById(id);
+      const lbl = document.getElementById(lblId);
+      if (el) el.value = val;
+      if (lbl) lbl.innerText = `${val.toFixed(1)} ${unit}`;
+    };
+    setVal('slider-heat-ecrh', 'lbl-ecrh', p.heatECRH, 'MW');
+    setVal('slider-heat-nbi', 'lbl-nbi', p.heatNBI, 'MW');
+    setVal('slider-mag', 'lbl-mag', p.magField, 'T');
+    setVal('slider-ip', 'lbl-ip', p.plasmaCurrent, 'MA');
+  },
+
+  resetControlsToStandby() {
+    const bp = document.getElementById('btn-power');
+    if (bp) {
+      bp.innerText = I18N.t('powerStandby');
+      bp.style.background = 'linear-gradient(135deg, #10b981, #047857)';
+      bp.style.boxShadow = '0 0 12px rgba(16, 185, 129, 0.4)';
+    }
+    const setZero = (id, lblId, unit) => {
+      const el = document.getElementById(id);
+      const lbl = document.getElementById(lblId);
+      if (el) el.value = 0;
+      if (lbl) lbl.innerText = `0.0 ${unit}`;
+    };
+    setZero('slider-heat-ecrh', 'lbl-ecrh', 'MW');
+    setZero('slider-heat-nbi', 'lbl-nbi', 'MW');
   },
 
   showSTLDiagnosis(diag) {
@@ -293,7 +430,6 @@ const UI = {
       document.getElementById('ui-layer').appendChild(toast);
     }
 
-    const isZh = I18N.currentLang === 'zh';
     const adviceText = (parseFloat(diag.complexityFactor) > 1.3) ? I18N.t('diagAdviceRough') : I18N.t('diagAdviceSafe');
 
     toast.innerHTML = `
