@@ -1,5 +1,5 @@
 // =========================================================================
-// J.A.R. 聚變核心 3D - 100% 全雙語介面與證書系統 (ui.js v11.0)
+// J.A.R. 聚變核心 3D - 100% 全雙語介面與證書系統 (ui.js v11.5)
 // =========================================================================
 
 const I18N = {
@@ -57,7 +57,15 @@ const I18N = {
       diagTurb: '湍流係數',
       diagImpact: '輸運影響',
       diagAdviceSafe: '幾何對稱度極高，等離子體流動阻力低，能量約束時間獲得增益。',
-      diagAdviceRough: '模型稜角增加了邊界熱擴散與雜質脫附，建議適當提高磁場 B_T。'
+      diagAdviceRough: '模型稜角增加了邊界熱擴散與雜質脫附，建議適當提高磁場 B_T。',
+      tutStep1Title: '第一步：啟動主電源',
+      tutStep1Desc: '點擊底部綠色按鈕啟動反應堆，等離子體將開始注入環面。',
+      tutStep2Title: '第二步：提升微波加熱',
+      tutStep2Desc: '將 P_ECRH 滑塊調高至 15 MW 以上，觀察雙溫電子溫度飆升。',
+      tutStep3Title: '第三步：維持點火燃燒',
+      tutStep3Desc: '當能量增益 Q ≥ 1.0 時即達成點火！若過熱請開啟偏濾器排氣。',
+      tutSkip: '跳過',
+      tutNext: '下一步'
     },
     en: {
       toggleBtn: '中文',
@@ -110,7 +118,15 @@ const I18N = {
       diagTurb: 'Turbulence',
       diagImpact: 'Transport Penalty',
       diagAdviceSafe: 'High symmetry geometric structure. Low plasma drag with enhanced tau_E.',
-      diagAdviceRough: 'Sharp edges increased turbulent transport and impurity desorption.'
+      diagAdviceRough: 'Sharp edges increased turbulent transport and impurity desorption.',
+      tutStep1Title: 'Step 1: Energize Master Power',
+      tutStep1Desc: 'Click the green power button below to inject and confine plasma.',
+      tutStep2Title: 'Step 2: Ramp Up ECRH Heating',
+      tutStep2Desc: 'Slide P_ECRH above 15 MW and observe core electron temperature rise.',
+      tutStep3Title: 'Step 3: Sustain Fusion Breakeven',
+      tutStep3Desc: 'Achieve ignition when Q ≥ 1.0! Purge divertor if wall gets too hot.',
+      tutSkip: 'Skip',
+      tutNext: 'Next'
     }
   },
 
@@ -125,6 +141,9 @@ const I18N = {
     if (dom && dom.btnPower) {
       dom.btnPower.innerText = FusionPhysics.state.isOnline ? this.t('powerRunning') : this.t('powerStandby');
     }
+    if (dom && dom.lblHudToggle) {
+      dom.lblHudToggle.innerText = UI.isHudHidden ? this.t('showHud') : this.t('hideHud');
+    }
     this.updateDropdownOptions(dom);
     CareerManager.updateRank();
   },
@@ -132,7 +151,10 @@ const I18N = {
   toggleLanguage(dom) {
     this.currentLang = this.currentLang === 'zh' ? 'en' : 'zh';
     this.applyLanguage(dom);
-    this.renderDynamicControlSliders();
+    UI.renderDynamicControlSliders();
+    if (document.getElementById('tutorial-guide')) {
+      UI.showTutorialStep(UI._currentTutStep || 0);
+    }
   },
 
   updateDropdownOptions(dom) {
@@ -183,6 +205,7 @@ const UI = {
   lastUpdateTime: 0,
   updateIntervalMs: 50,
   _toastTimer: null,
+  _currentTutStep: 0,
   isHudHidden: false,
 
   init() {
@@ -207,6 +230,7 @@ const UI = {
       btnLangToggle: document.getElementById('btn-lang-toggle'),
       selectMode: document.getElementById('select-mode'),
       btnHudToggle: document.getElementById('btn-hud-toggle'),
+      lblHudToggle: document.getElementById('lbl-hud-toggle'),
       btnCert: document.getElementById('btn-cert'),
       controlsPanel: document.getElementById('controls-panel'),
       btnPower: document.getElementById('btn-power'),
@@ -256,7 +280,9 @@ const UI = {
       this.dom.btnHudToggle.onclick = () => {
         this.isHudHidden = !this.isHudHidden;
         this.dom.hudArea.style.display = this.isHudHidden ? 'none' : 'grid';
-        this.dom.btnHudToggle.innerHTML = this.isHudHidden ? `👁️ ${I18N.t('showHud')}` : `👁️ ${I18N.t('hideHud')}`;
+        if (this.dom.lblHudToggle) {
+          this.dom.lblHudToggle.innerText = this.isHudHidden ? I18N.t('showHud') : I18N.t('hideHud');
+        }
       };
     }
 
@@ -437,7 +463,7 @@ const UI = {
 
   showTutorialStep(stepIndex) {
     if (CareerManager.data.tutorialPassed) return;
-    const isZh = I18N.currentLang === 'zh';
+    this._currentTutStep = stepIndex;
     let guide = document.getElementById('tutorial-guide');
     if (!guide) {
       guide = document.createElement('div');
@@ -447,19 +473,16 @@ const UI = {
 
     const steps = [
       {
-        title: isZh ? '第一步：啟動主電源' : 'Step 1: Energize Master Power',
-        desc: isZh ? '點擊底部綠色按鈕啟動反應堆，等離子體將開始注入環面。' : 'Click the green power button below to inject and confine plasma.',
-        target: 'btn-power'
+        title: I18N.t('tutStep1Title'),
+        desc: I18N.t('tutStep1Desc')
       },
       {
-        title: isZh ? '第二步：提升微波加熱' : 'Step 2: Ramp Up ECRH Heating',
-        desc: isZh ? '將 P_ECRH 滑塊調高至 15 MW 以上，觀察雙溫電子溫度飆升。' : 'Slide P_ECRH above 15 MW and observe core electron temperature rise.',
-        target: 'slider-heat-ecrh'
+        title: I18N.t('tutStep2Title'),
+        desc: I18N.t('tutStep2Desc')
       },
       {
-        title: isZh ? '第三步：維持點火燃燒' : 'Step 3: Sustain Fusion Breakeven',
-        desc: isZh ? '當能量增益 Q ≥ 1.0 時即達成點火！若過熱請開啟偏濾器排氣。' : 'Achieve ignition when Q ≥ 1.0! Purge divertor if wall gets too hot.',
-        target: 'val-q'
+        title: I18N.t('tutStep3Title'),
+        desc: I18N.t('tutStep3Desc')
       }
     ];
 
@@ -473,9 +496,9 @@ const UI = {
     const s = steps[stepIndex];
     guide.innerHTML = `
       <div class="guide-card">
-        <div class="guide-header"><b>💡 ${s.title}</b><span id="btn-skip-guide">${isZh ? '跳過' : 'Skip'}</span></div>
+        <div class="guide-header"><b>💡 ${s.title}</b><span id="btn-skip-guide">${I18N.t('tutSkip')}</span></div>
         <div class="guide-desc">${s.desc}</div>
-        <button id="btn-next-guide" class="btn-guide-action">${isZh ? '下一步' : 'Next'}</button>
+        <button id="btn-next-guide" class="btn-guide-action">${I18N.t('tutNext')}</button>
       </div>
     `;
 
@@ -590,7 +613,6 @@ const UI = {
     ctx.fillText(`🚨 ${triggerMetric}`, w - 210, 12);
   },
 
-  // 📜 繪製可分享的國家級聚變資格執照 (Canvas Certificate)
   renderCertificate() {
     const canvas = this.dom.certCanvas;
     if (!canvas) return;
@@ -602,7 +624,6 @@ const UI = {
     ctx.fillStyle = '#090d16';
     ctx.fillRect(0, 0, w, h);
 
-    // 金屬外框
     ctx.strokeStyle = '#38bdf8';
     ctx.lineWidth = 2;
     ctx.strokeRect(10, 10, w - 20, h - 20);
@@ -611,7 +632,6 @@ const UI = {
     ctx.lineWidth = 1;
     ctx.strokeRect(14, 14, w - 28, h - 28);
 
-    // 徽章標題
     ctx.fillStyle = '#ffffff';
     ctx.font = 'bold 16px "Segoe UI", sans-serif';
     ctx.textAlign = 'center';
@@ -621,7 +641,6 @@ const UI = {
     ctx.fillStyle = '#64748b';
     ctx.fillText(`PILOT LICENSE ID: ${CareerManager.data.pilotId} | AUTH: ITER-LEVEL 1.5D`, w / 2, 60);
 
-    // 核心數據卡
     ctx.fillStyle = 'rgba(15, 23, 42, 0.8)';
     ctx.fillRect(30, 80, w - 60, 140);
     ctx.strokeStyle = '#1e293b';
@@ -656,7 +675,6 @@ const UI = {
     ctx.font = 'bold 15px monospace';
     ctx.fillText(`${CareerManager.data.missionsCompleted} Missions`, 210, 200);
 
-    // 官方鋼印
     ctx.save();
     ctx.translate(w - 90, h - 70);
     ctx.rotate(-0.15);
