@@ -59,6 +59,7 @@ body {
   opacity: 0.85;
 }
 
+/* 核心修復：適配 iOS Safe Area Insets (避開瀏海/動態島與底部小白條) */
 #ui-layer {
   position: absolute;
   top: 0;
@@ -70,17 +71,20 @@ body {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  padding: 8px 12px;
+  padding-top: max(10px, env(safe-area-inset-top));
+  padding-bottom: max(10px, env(safe-area-inset-bottom));
+  padding-left: max(12px, env(safe-area-inset-left));
+  padding-right: max(12px, env(safe-area-inset-right));
 }
 
 /* ========================================================
-   頂部微型常駐列與折疊抽屜 (Top Bar & Menu Drawer)
+   頂部微型常駐列與折疊抽屜
 ======================================================== */
 #top-bar {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
   max-width: 1240px;
   margin: 0 auto;
   width: 100%;
@@ -96,13 +100,13 @@ body {
 
 #integrity-container {
   flex: 1.4;
-  min-width: 130px;
+  min-width: 120px;
   background: rgba(15, 23, 42, 0.92);
   border: 1px solid rgba(0, 240, 255, 0.4);
   box-shadow: inset 0 0 25px rgba(0, 240, 255, 0.05), 0 0 15px rgba(0, 240, 255, 0.1);
   backdrop-filter: blur(12px);
   border-radius: 6px;
-  padding: 3px 8px;
+  padding: 4px 8px;
   pointer-events: auto;
   overflow: hidden;
 }
@@ -114,7 +118,7 @@ body {
   border: 1px solid rgba(0, 240, 255, 0.4);
   box-shadow: inset 0 0 15px rgba(0, 240, 255, 0.06);
   border-radius: 6px;
-  padding: 3px 8px;
+  padding: 4px 8px;
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -139,7 +143,7 @@ body {
   color: #94a3b8;
 }
 
-/* 頂部折疊抽屜 */
+/* 頂部功能抽屜 */
 #top-menu-drawer {
   display: flex;
   gap: 6px;
@@ -170,7 +174,7 @@ body {
   border: 1px solid #00f0ff;
   box-shadow: inset 0 0 12px rgba(0, 240, 255, 0.15);
   color: #00f0ff;
-  padding: 4px 8px;
+  padding: 5px 8px;
   border-radius: 6px;
   font-size: 10px;
   font-weight: bold;
@@ -189,13 +193,17 @@ body {
   background: rgba(15, 23, 42, 0.88);
   border: 1px solid rgba(0, 240, 255, 0.5);
   color: #00f0ff;
-  padding: 4px 8px;
+  padding: 6px 10px;
   border-radius: 6px;
   font-size: 10px;
   font-weight: bold;
   cursor: pointer;
   pointer-events: auto;
   white-space: nowrap;
+  min-height: 30px; /* 保證觸控高度 */
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 .btn-top-util:hover {
   background: #00f0ff;
@@ -252,7 +260,7 @@ body {
 }
 
 /* ========================================================
-   左右抽屜式可折疊 HUD
+   左右抽屜式折疊 HUD
 ======================================================== */
 .drawer-tab {
   position: absolute;
@@ -260,9 +268,9 @@ body {
   background: rgba(15, 23, 42, 0.96);
   border: 1px solid #38bdf8;
   color: #38bdf8;
-  font-size: 9px;
+  font-size: 9.5px;
   font-weight: bold;
-  padding: 3px 6px;
+  padding: 4px 8px;
   border-radius: 4px;
   cursor: pointer;
   pointer-events: auto;
@@ -273,8 +281,8 @@ body {
 
 #flux-monitor {
   position: absolute;
-  top: 60px;
-  left: 8px;
+  top: calc(max(10px, env(safe-area-inset-top)) + 45px);
+  left: 10px;
   background: rgba(15, 23, 42, 0.94);
   border: 1px solid rgba(0, 240, 255, 0.45);
   box-shadow: inset 0 0 25px rgba(0, 240, 255, 0.08), 0 0 20px rgba(0, 240, 255, 0.15);
@@ -287,12 +295,12 @@ body {
 }
 
 .left-tab {
-  right: -52px;
+  right: -56px;
   border-left: none;
 }
 
 #flux-monitor.drawer-closed {
-  transform: translateX(calc(-100% - 8px));
+  transform: translateX(calc(-100% - 10px));
 }
 
 #flux-monitor.drawer-open {
@@ -330,8 +338,8 @@ body {
 
 #mission-hud {
   position: absolute;
-  top: 60px;
-  right: 8px;
+  top: calc(max(10px, env(safe-area-inset-top)) + 45px);
+  right: 10px;
   width: 210px;
   background: rgba(15, 23, 42, 0.94);
   border: 1px solid rgba(0, 240, 255, 0.45);
@@ -345,12 +353,12 @@ body {
 }
 
 .right-tab {
-  left: -50px;
+  left: -54px;
   border-right: none;
 }
 
 #mission-hud.drawer-closed {
-  transform: translateX(calc(100% + 8px));
+  transform: translateX(calc(100% + 10px));
 }
 
 #mission-hud.drawer-open {
@@ -521,7 +529,7 @@ body {
   background: rgba(15, 23, 42, 0.85);
   border: 1px solid rgba(0, 240, 255, 0.35);
   color: #38bdf8;
-  padding: 2px 12px;
+  padding: 3px 12px;
   border-radius: 4px;
   font-size: 8.5px;
   font-weight: bold;
@@ -565,7 +573,7 @@ input[type=range] {
   appearance: none;
   background: transparent;
   cursor: pointer;
-  height: 3px;
+  height: 4px;
   background: linear-gradient(90deg, #1e293b, rgba(0, 240, 255, 0.6));
   border-radius: 2px;
   outline: none;
@@ -574,8 +582,8 @@ input[type=range] {
 input[type=range]::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 11px;
-  height: 11px;
+  width: 12px;
+  height: 12px;
   border-radius: 50%;
   background: #00f0ff;
   border: 2px solid #ffffff;
@@ -593,7 +601,7 @@ input[type=range]::-webkit-slider-thumb {
 button {
   flex: 1;
   min-width: 80px;
-  padding: 4px 5px;
+  padding: 5px 6px;
   font-weight: 700;
   font-size: 9px;
   border: none;
@@ -641,7 +649,7 @@ button {
 
 #achievement-toast {
   position: fixed;
-  top: 15px;
+  top: calc(max(15px, env(safe-area-inset-top)));
   right: 15px;
   background: rgba(15, 23, 42, 0.95);
   border: 1px solid #f59e0b;
@@ -725,7 +733,7 @@ button {
 .victory-card { border-color: #4ade80; }
 .modal-header { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 800; color: #fff; }
 .modal-body { display: flex; flex-direction: column; gap: 4px; }
-.report-section { display: flex; flex-direction: column; gap: 1px; }
+.report-section { display: flex; flex-direction: column; gap: 2px; }
 .report-label { font-size: 8px; color: #94a3b8; }
 .report-value { font-size: 10.5px; font-weight: bold; color: #ef4444; }
 
@@ -756,22 +764,20 @@ button {
    📱 手機直向 (Portrait)
 ======================================================== */
 @media screen and (max-width: 768px) and (orientation: portrait) {
-  #ui-layer { padding: 6px 8px; }
   #hud { grid-template-columns: 1fr 1fr; gap: 3px; }
   #controls-panel { grid-template-columns: 1fr 1fr; }
 }
 
 /* ========================================================
-   📱 手機橫向 (Landscape 極致清爽視角)
+   📱 手機橫向 (Landscape)
 ======================================================== */
 @media screen and (orientation: landscape) and (max-height: 500px) {
-  #ui-layer { padding: 4px 8px; }
   #top-header-row { height: 24px; }
   #integrity-container, #career-badge { height: 24px; padding: 1px 6px; }
   .btn-top-util { height: 24px; padding: 1px 6px; font-size: 9px; }
 
-  #flux-monitor { top: 32px; left: 6px; }
-  #mission-hud { top: 32px; right: 6px; width: 175px; }
+  #flux-monitor { top: calc(max(6px, env(safe-area-inset-top)) + 26px); left: 6px; }
+  #mission-hud { top: calc(max(6px, env(safe-area-inset-top)) + 26px); right: 6px; width: 175px; }
 
   #hud {
     grid-template-columns: repeat(4, 1fr);
