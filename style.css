@@ -78,7 +78,7 @@ body {
   flex-direction: column;
   align-items: center;
   gap: 6px;
-  max-width: 960px;
+  max-width: 1020px;
   margin: 0 auto;
   width: 100%;
 }
@@ -124,6 +124,33 @@ body {
   font-size: 9px;
   font-family: monospace;
   color: #94a3b8;
+}
+
+/* 模式下拉選單 */
+.mode-select-wrap {
+  position: relative;
+  pointer-events: auto;
+}
+
+.select-mode-dropdown {
+  background: rgba(15, 23, 42, 0.95);
+  border: 1px solid #00f0ff;
+  box-shadow: inset 0 0 12px rgba(0, 240, 255, 0.15), 0 0 10px rgba(0, 240, 255, 0.2);
+  color: #00f0ff;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: bold;
+  letter-spacing: 0.5px;
+  outline: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.select-mode-dropdown option {
+  background: #0f172a;
+  color: #fff;
+  font-weight: bold;
 }
 
 .btn-top-util {
@@ -205,7 +232,7 @@ body {
   position: absolute;
   top: 85px;
   right: 20px;
-  width: 240px;
+  width: 250px;
   background: rgba(15, 23, 42, 0.92);
   border: 1px solid rgba(0, 240, 255, 0.4);
   box-shadow: inset 0 0 20px rgba(0, 240, 255, 0.05), 0 0 15px rgba(0, 240, 255, 0.12);
@@ -250,8 +277,14 @@ body {
   line-height: 1.3;
 }
 
+.mission-progress-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .mission-progress-bar-bg {
-  width: 100%;
+  flex: 1;
   height: 6px;
   background: #090d16;
   border-radius: 3px;
@@ -267,7 +300,15 @@ body {
   transition: width 0.1s linear;
 }
 
-/* 左側磁通量示波器 (修復文字對比度) */
+#mission-pct-label {
+  font-size: 10px;
+  font-family: monospace;
+  font-weight: bold;
+  color: #4ade80;
+  min-width: 28px;
+}
+
+/* 左側磁通量示波器 */
 #flux-monitor {
   position: absolute;
   top: 85px;
@@ -314,12 +355,12 @@ body {
   text-align: center;
 }
 
-/* 底部下沉 Dock (讓出整個中間 3D 視野) */
+/* 底部整合 Dock (開闊中間視野) */
 #bottom-dock {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-width: 960px;
+  max-width: 1020px;
   margin: 0 auto;
   width: 100%;
   pointer-events: auto;
@@ -408,11 +449,11 @@ body {
   text-shadow: 0 0 20px #4ade80, 0 0 50px rgba(74, 222, 128, 0.7) !important;
 }
 
-/* 控制面板 */
+/* 自適應控制面板 (支援 4 / 6 / 9 網格自動折行) */
 #controls-panel {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px 12px;
   width: 100%;
   background: rgba(15, 23, 42, 0.92);
   border: 1px solid rgba(0, 240, 255, 0.35);
@@ -425,7 +466,7 @@ body {
 .control-group {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 3px;
 }
 
 label {
@@ -466,10 +507,10 @@ input[type=range]::-webkit-slider-thumb:hover {
 }
 
 .btn-row {
-  grid-column: span 4;
+  grid-column: 1 / -1;
   display: flex;
   gap: 8px;
-  margin-top: 2px;
+  margin-top: 4px;
 }
 
 button {
@@ -600,7 +641,6 @@ button:active {
   line-height: 1.35;
 }
 
-/* 事故彈窗 */
 .modal-overlay {
   position: fixed;
   top: 0;
