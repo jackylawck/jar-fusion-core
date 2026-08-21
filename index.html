@@ -88,6 +88,7 @@
 
       <!-- 可折疊的次要功能抽屜（平時隱藏） -->
       <div id="top-menu-drawer" class="top-drawer-closed">
+        <!-- 1. 運行模式切換 -->
         <div class="mode-select-wrap">
           <select id="select-mode" class="select-mode-dropdown">
             <option value="0">🟢 簡易科普</option>
@@ -95,6 +96,18 @@
             <option value="2">🔴 博士科研</option>
           </select>
         </div>
+
+        <!-- 2. 反應堆裝置選擇器 -->
+        <div class="mode-select-wrap">
+          <select id="select-preset" class="select-mode-dropdown">
+            <option value="DEFAULT">⚛️ 標準參考堆</option>
+            <option value="EAST">🇨🇳 EAST (東方超環)</option>
+            <option value="JET">🇪🇺 JET (歐洲聯合環)</option>
+            <option value="ITER">🌍 ITER (國際熱核堆)</option>
+            <option value="SPARC">🇺🇸 SPARC (MIT 高溫超導)</option>
+          </select>
+        </div>
+
         <button id="btn-cert" class="btn-top-util" data-i18n="btnCert">📜 證書</button>
         <button id="btn-lang-toggle" class="btn-top-util">English</button>
         <button id="btn-hud-toggle" class="btn-top-util">👁️ <span id="lbl-hud-toggle" data-i18n="hideHud">精簡</span></button>
