@@ -5,18 +5,35 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>J.A.R. 聚變核心 3D (Joint Advanced Reactor Fusion Core 3D)</title>
   <link rel="stylesheet" href="style.css">
+  
+  <!-- Three.js 核心與控制器 -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  
+  <!-- 3A 級 UnrealBloom 後處理管線組件 -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/EffectComposer.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/CopyShader.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/LuminosityHighPassShader.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
 </head>
 <body>
 
+  <!-- 3D WebGL 畫布容器 -->
   <div id="canvas-container"></div>
+
+  <!-- 3A 全球環境光暈層 (Ambient Atmosphere Glow) -->
+  <div id="atmosphere-glow"></div>
+
+  <!-- 3A 動態全息掃描線與經緯光柵 -->
+  <div id="scanlines"></div>
 
   <!-- 維修長按 HUD 環 -->
   <div id="repair-hud" class="hidden">
-    <svg class="progress-ring" width="80" height="80">
-      <circle class="progress-ring__circle-bg" stroke="#334155" stroke-width="6" fill="transparent" r="32" cx="40" cy="40"/>
-      <circle id="repair-progress-bar" class="progress-ring__circle" stroke="#00f0ff" stroke-width="6" fill="transparent" r="32" cx="40" cy="40"/>
+    <svg class="progress-ring" width="90" height="90">
+      <circle class="progress-ring__circle-bg" stroke="#1e293b" stroke-width="6" fill="transparent" r="36" cx="45" cy="45"/>
+      <circle id="repair-progress-bar" class="progress-ring__circle" stroke="#00f0ff" stroke-width="6" fill="transparent" r="36" cx="45" cy="45"/>
     </svg>
     <div id="repair-label" data-i18n="repairing">正在修復線圈</div>
   </div>
@@ -27,7 +44,7 @@
       <div id="top-header-row">
         <div id="integrity-container">
           <div class="bar-header">
-            <span id="label-wall-integrity" data-i18n="wallIntegrity">第一壁材料狀態</span>
+            <span id="label-wall-integrity" data-i18n="wallIntegrity">第一壁材料狀態 (First Wall Integrity)</span>
             <span id="integrity-val">100.0% [Max: 100%]</span>
           </div>
           <div class="bar-bg">
@@ -47,23 +64,28 @@
       <div class="monitor-foot" id="flux-info">κ: 1.75 | Δ_Shaf: 0.08m</div>
     </div>
 
-    <!-- 中部 HUD 數據卡片 -->
+    <!-- 中部 3A 級 3+1 HUD (34px 全息投影級視覺錨點) -->
     <div id="hud">
-      <div class="hud-card">
+      <div class="hud-card hud-card-core">
         <div class="hud-title" data-i18n="dualTemp">雙溫分離 (Te / Ti)</div>
-        <div class="hud-val"><span class="temp-e" id="val-te">Te: 2.5</span> / <span class="temp-i" id="val-ti">Ti: 1.8</span> keV</div>
+        <div class="hud-val-large">
+          <span class="temp-e" id="val-te">2.5</span><span class="temp-slash">/</span><span class="temp-i" id="val-ti">1.8</span> <span class="hud-unit">keV</span>
+        </div>
       </div>
-      <div class="hud-card">
-        <div class="hud-title" data-i18n="safetyFactor">安全因子 q₉₅ / 歸一化 β_N</div>
-        <div class="hud-val" id="val-q95-beta">q: 3.50 | β: 1.2</div>
-      </div>
-      <div class="hud-card" id="card-q">
+
+      <div class="hud-card hud-card-core" id="card-q">
         <div class="hud-title" data-i18n="energyGain">聚變能量增益 Q</div>
-        <div class="hud-val" id="val-q">0.00</div>
+        <div class="hud-val-large" id="val-q">0.00</div>
       </div>
-      <div class="hud-card">
-        <div class="hud-title" data-i18n="densityLimit">密度極限 n₀ / n_G</div>
-        <div class="hud-val" id="val-greenwald">0.35</div>
+
+      <div class="hud-card hud-card-core">
+        <div class="hud-title" data-i18n="safetyFactor">安全因子 q₉₅ / 歸一化 β_N</div>
+        <div class="hud-val-mid" id="val-q95-beta">q: 3.50 | β: 1.2</div>
+      </div>
+
+      <div class="hud-card hud-card-sub">
+        <div class="hud-title" data-i18n="densityLimit">密度極限 n/n_G</div>
+        <div class="hud-val-sub" id="val-greenwald">0.35</div>
       </div>
     </div>
 
