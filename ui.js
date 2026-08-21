@@ -1,4 +1,3 @@
-// --- 國際化雙語字典與狀態機 ---
 const I18N = {
   currentLang: (navigator.language && navigator.language.toLowerCase().startsWith('zh')) ? 'zh' : 'en',
 
@@ -18,13 +17,10 @@ const I18N = {
       injectFuel: '注入 D-T 燃料顆粒',
       divertorPurge: '開啟偏濾器排熱',
       repairing: '正在修復線圈',
-      disruption: '💥 大破裂 (MAJOR DISRUPTION)！第一壁材料熔毀，等離子體崩解！',
-      elmAlert: '⚡ Type-I ELM 邊緣爆發！強熱流衝擊第一壁！',
-      q95Alert: '⚠️ MHD 撕裂警報：q95 < 2.0！提高磁場 B 或降低電流 I_p！',
-      betaAlert: '⚠️ 接近 Troyon Beta_N 極限！壓力梯度過大！',
-      greenwaldAlert: '⚠️ 格林沃德密度超限 (n > n_G)！引發輻射坍縮！',
-      coilAlert: '🚨 磁場線圈局部撕裂！按住故障線圈 0.8 秒緊急修復！',
-      hModeActive: '✨ H-Mode 高約束模式已啟動 (Confinement Enhanced)'
+      incidentTitle: '事故黑盒子歸因診斷 (Incident Report)',
+      primaryCause: '主因判定',
+      tacticalAdvice: '首席工程師建議',
+      restartCore: '重啟反應爐循環'
     },
     en: {
       toggleBtn: '中文',
@@ -41,28 +37,21 @@ const I18N = {
       injectFuel: 'Inject D-T Fuel Pellet',
       divertorPurge: 'Purge Divertor Exhaust',
       repairing: 'REPAIRING COIL',
-      disruption: '💥 MAJOR DISRUPTION! First wall melted, confinement lost!',
-      elmAlert: '⚡ Type-I ELM Burst! High heat flux impacting first wall!',
-      q95Alert: '⚠️ MHD Tearing Alert: q95 < 2.0! Increase B or decrease I_p!',
-      betaAlert: '⚠️ Troyon Beta_N Limit exceeded! Pressure gradient too high!',
-      greenwaldAlert: '⚠️ Greenwald density exceeded (n > n_G)! Radiation collapse!',
-      coilAlert: '🚨 Local magnetic tear! Hold failing coil for 0.8s to weld!',
-      hModeActive: '✨ H-Mode Active (Confinement Enhanced)'
+      incidentTitle: 'Incident Black Box Diagnostic',
+      primaryCause: 'PRIMARY CAUSE',
+      tacticalAdvice: 'CHIEF ENGINEER ADVICE',
+      restartCore: 'RESTART REACTOR CYCLE'
     }
   },
 
-  t(key) {
-    return this.dict[this.currentLang][key] || key;
-  },
+  t(key) { return this.dict[this.currentLang][key] || key; },
 
   applyLanguage(dom) {
     document.querySelectorAll('[data-i18n]').forEach(el => {
       const key = el.getAttribute('data-i18n');
       el.innerText = this.t(key);
     });
-    if (dom && dom.btnLangToggle) {
-      dom.btnLangToggle.innerText = this.t('toggleBtn');
-    }
+    if (dom && dom.btnLangToggle) dom.btnLangToggle.innerText = this.t('toggleBtn');
   },
 
   toggleLanguage(dom) {
@@ -71,22 +60,11 @@ const I18N = {
   }
 };
 
-// --- 視圖模型轉換器 (UIViewModel: 解耦物理與 DOM) ---
 const UIViewModel = {
   fromState(st) {
     const isQUnstable = st.q95 < 2.0 || st.betaN > 2.8;
     const isGreenwaldOver = st.greenwaldRatio > 1.0;
     const isIgnition = st.qGain >= 1.0;
-
-    let alertKey = '';
-    if (st.gameOver) alertKey = 'disruption';
-    else if (st.elmBurst) alertKey = 'elmAlert';
-    else if (st.q95 < 2.0) alertKey = 'q95Alert';
-    else if (st.betaN > 2.8) alertKey = 'betaAlert';
-    else if (st.greenwaldRatio > 1.0) alertKey = 'greenwaldAlert';
-    else if (st.failingCoilIndex !== -1) alertKey = 'coilAlert';
-    else if (st.isHMode) alertKey = 'hModeActive';
-
     const maxT = Math.max(st.tempE0, st.tempI0);
     const scanlineSpeed = Math.max(6.0 - maxT * 0.25, 0.8).toFixed(2);
 
@@ -111,7 +89,6 @@ const UIViewModel = {
       integrityText: `${st.integrity.toFixed(1)}% [Max: ${st.maxIntegrity.toFixed(1)}%]`,
       integrityWidth: `${st.integrity}%`,
       integrityMaxWidth: `${st.maxIntegrity}%`,
-      alertText: alertKey ? I18N.t(alertKey) : '',
       scanlineSpeed,
       atmosphereBg,
       fluxInfoText: `κ: ${TOKAMAK_GEO.kappa} | Δ_Shaf: ${st.shafranovShift.toFixed(2)}m`
@@ -119,14 +96,12 @@ const UIViewModel = {
   }
 };
 
-// --- UI 主控模組 (快取 + 節流) ---
 const UI = {
   dom: {},
   lastUpdateTime: 0,
-  updateIntervalMs: 50, // 20Hz 節流 (每 50ms 刷新一次 DOM 文字，大幅節省 CPU)
+  updateIntervalMs: 50,
 
   init() {
-    // 1. 全域快取所有 DOM 節點引用
     this.dom = {
       valTe: document.getElementById('val-te'),
       valTi: document.getElementById('val-ti'),
@@ -149,14 +124,32 @@ const UI = {
       labelHeatEcrh: document.getElementById('label-heat-ecrh'),
       labelHeatNbi: document.getElementById('label-heat-nbi'),
       labelMag: document.getElementById('label-mag'),
-      labelIp: document.getElementById('label-ip')
+      labelIp: document.getElementById('label-ip'),
+      
+      careerRank: document.getElementById('career-rank'),
+      careerStat: document.getElementById('career-stat'),
+      missionName: document.getElementById('mission-name'),
+      missionDesc: document.getElementById('mission-desc'),
+      missionTimer: document.getElementById('mission-timer'),
+      missionProgressBar: document.getElementById('mission-progress-bar'),
+      
+      incidentModal: document.getElementById('incident-modal'),
+      reportCause: document.getElementById('report-cause'),
+      reportQ: document.getElementById('report-q'),
+      reportTemp: document.getElementById('report-temp'),
+      reportQ95: document.getElementById('report-q95'),
+      reportGreenwald: document.getElementById('report-greenwald'),
+      reportAdvice: document.getElementById('report-advice'),
+      btnRestart: document.getElementById('btn-restart'),
+      
+      victoryModal: document.getElementById('victory-modal'),
+      victoryRank: document.getElementById('victory-rank'),
+      btnNextMission: document.getElementById('btn-next-mission')
     };
 
-    // 2. 初始化語言與切換綁定
     I18N.applyLanguage(this.dom);
     this.dom.btnLangToggle.onclick = () => I18N.toggleLanguage(this.dom);
 
-    // 3. 輸入事件綁定
     document.getElementById('slider-heat-ecrh').oninput = (e) => {
       FusionPhysics.state.heatECRH = parseFloat(e.target.value);
       this.dom.labelHeatEcrh.innerText = `${FusionPhysics.state.heatECRH.toFixed(1)} MW`;
@@ -174,11 +167,35 @@ const UI = {
       this.dom.labelIp.innerText = `${FusionPhysics.state.plasmaCurrent.toFixed(1)} MA`;
     };
 
-    document.getElementById('btn-fuel').onclick = () => FusionPhysics.injectPellet();
-    document.getElementById('btn-cool').onclick = () => FusionPhysics.purgeDivertor();
+    document.getElementById('btn-fuel').onclick = () => GameController.injectPellet();
+    document.getElementById('btn-cool').onclick = () => GameController.purgeDivertor();
+    this.dom.btnRestart.onclick = () => GameController.restartSimulation();
+    this.dom.btnNextMission.onclick = () => {
+      MissionEngine.nextMission();
+      this.hideModals();
+    };
   },
 
-  // 繪製 2D 磁通量表面分析儀 (與 3D 渲染同步流暢繪製)
+  showIncidentReport(report) {
+    this.dom.reportCause.innerText = report.cause;
+    this.dom.reportQ.innerText = report.q;
+    this.dom.reportTemp.innerText = report.temp;
+    this.dom.reportQ95.innerText = report.q95;
+    this.dom.reportGreenwald.innerText = report.greenwald;
+    this.dom.reportAdvice.innerText = report.advice;
+    this.dom.incidentModal.classList.remove('hidden');
+  },
+
+  showVictoryModal(mission, rank) {
+    this.dom.victoryRank.innerText = rank;
+    this.dom.victoryModal.classList.remove('hidden');
+  },
+
+  hideModals() {
+    this.dom.incidentModal.classList.add('hidden');
+    this.dom.victoryModal.classList.add('hidden');
+  },
+
   renderPoloidalFlux(shafranovShift, kappa, delta) {
     const ctx = this.dom.fluxCtx;
     const w = this.dom.fluxCanvas.width;
@@ -189,7 +206,6 @@ const UI = {
     const cy = h / 2;
     const numSurfaces = 6;
 
-    // 真空室 D 型內壁
     ctx.strokeStyle = '#334155';
     ctx.lineWidth = 1.5;
     ctx.beginPath();
@@ -203,7 +219,6 @@ const UI = {
     ctx.closePath();
     ctx.stroke();
 
-    // 嵌套磁通量等高線
     for (let i = 1; i <= numSurfaces; i++) {
       const rho = i / numSurfaces;
       const r = 50 * rho;
@@ -223,23 +238,18 @@ const UI = {
       ctx.stroke();
     }
 
-    // 磁軸 O-point
     ctx.fillStyle = '#f43f5e';
     ctx.beginPath();
     ctx.arc(cx + shafranovShift * 60, cy, 3, 0, Math.PI * 2);
     ctx.fill();
   },
 
-  // 實時 HUD 更新 (帶有 ViewModel 轉換與 20Hz 節流)
   updateHUD(st, now) {
-    // 1. 2D 磁通量分析儀維持每幀繪製
     this.renderPoloidalFlux(st.shafranovShift, TOKAMAK_GEO.kappa, TOKAMAK_GEO.delta);
 
-    // 2. DOM 數據節流檢查
     if (now && now - this.lastUpdateTime < this.updateIntervalMs) return;
     this.lastUpdateTime = now || performance.now();
 
-    // 3. 透過 ViewModel 計算所有顯示數據
     const vm = UIViewModel.fromState(st);
     const d = this.dom;
 
@@ -259,10 +269,24 @@ const UI = {
     if (vm.isIgnition) d.cardQ.classList.add('hud-ignition');
     else d.cardQ.classList.remove('hud-ignition');
 
-    d.alertMsg.innerText = vm.alertText;
     d.fluxInfo.innerText = vm.fluxInfoText;
-
     d.scanlines.style.animationDuration = `${vm.scanlineSpeed}s`;
     d.atmosphere.style.background = vm.atmosphereBg;
+
+    // 更新生涯徽章
+    d.careerRank.innerText = CareerManager.data.rank;
+    d.careerStat.innerText = `Q_max: ${CareerManager.data.maxQ.toFixed(2)} | 存活: ${Math.floor(CareerManager.data.totalSurvivalSeconds)}s`;
+
+    // 更新任務目標 HUD
+    const m = MissionEngine.getCurrent();
+    const isZh = I18N.currentLang === 'zh';
+    d.missionName.innerText = isZh ? m.nameZh : m.nameEn;
+    d.missionDesc.innerText = isZh ? m.descZh : m.descEn;
+    const progressPct = (m.currentProgress / m.requiredDuration) * 100;
+    d.missionProgressBar.style.width = `${progressPct}%`;
+    const remainingTime = Math.max(0, m.timeLimit - MissionEngine.timer);
+    const mins = Math.floor(remainingTime / 60).toString().padStart(2, '0');
+    const secs = Math.floor(remainingTime % 60).toString().padStart(2, '0');
+    d.missionTimer.innerText = `${mins}:${secs}`;
   }
 };
