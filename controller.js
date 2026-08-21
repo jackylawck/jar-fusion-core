@@ -1,5 +1,5 @@
 // =========================================================================
-// J.A.R. 聚變核心 3D - 遊戲控制器與敘事導演系統 (controller.js v11.0)
+// J.A.R. 聚變核心 3D - 遊戲控制器與敘事導演系統 (controller.js v15.0 Gold)
 // =========================================================================
 
 const CareerManager = {
@@ -10,13 +10,13 @@ const CareerManager = {
     missionsCompleted: 0,
     achievements: [],
     tutorialPassed: false,
-    rankZh: '國家聚變實驗室・見習員',
+    rankZh: '見習操作員',
     rankEn: 'Junior Intern'
   },
 
   load() {
     try {
-      const saved = localStorage.getItem('JAR_FUSION_CAREER_V11');
+      const saved = localStorage.getItem('JAR_FUSION_CAREER_V15');
       if (saved) this.data = Object.assign(this.data, JSON.parse(saved));
     } catch(e) {}
     this.updateRank();
@@ -24,7 +24,7 @@ const CareerManager = {
 
   save() {
     try {
-      localStorage.setItem('JAR_FUSION_CAREER_V11', JSON.stringify(this.data));
+      localStorage.setItem('JAR_FUSION_CAREER_V15', JSON.stringify(this.data));
     } catch(e) {}
   },
 
@@ -56,31 +56,29 @@ const CareerManager = {
     const m = this.data.missionsCompleted;
     
     if (m >= 5 && q >= 1.5) {
-      this.data.rankZh = '國家聚變能源研究院・院長';
-      this.data.rankEn = 'Director-General of Fusion Academy';
+      this.data.rankZh = '研究院長';
+      this.data.rankEn = 'Director General';
     } else if (m >= 3 && q >= 1.1) {
-      this.data.rankZh = '托卡馬克總體技術總監';
-      this.data.rankEn = 'Technical Director of Tokamak';
+      this.data.rankZh = '技術總監';
+      this.data.rankEn = 'Chief Engineer';
     } else if (q >= 1.0) {
-      this.data.rankZh = '等離子體控制首席工程師';
-      this.data.rankEn = 'Lead Plasma Control Specialist';
+      this.data.rankZh = '首席控制師';
+      this.data.rankEn = 'Lead Controller';
     } else if (this.data.totalSurvivalSeconds >= 30) {
-      this.data.rankZh = '運行值班工程師';
-      this.data.rankEn = 'Duty Operations Engineer';
+      this.data.rankZh = '值班工程師';
+      this.data.rankEn = 'Duty Engineer';
     } else {
-      this.data.rankZh = '國家聚變實驗室・見習員';
+      this.data.rankZh = '見習操作員';
       this.data.rankEn = 'Junior Intern';
     }
   }
 };
 
-// --- 具備深空情感敘事與自適應動態難度的任務引擎 ---
 const DynamicMissionEngine = {
   currentQuest: null,
   timer: 0,
 
   generateQuest(st) {
-    // 依據玩家完成任務數量動態自適應上調目標 (Adaptive Difficulty Scaling)
     const diffMultiplier = 1.0 + Math.min(CareerManager.data.missionsCompleted * 0.05, 0.4);
 
     if (st.tempE0 < 10.0) {
