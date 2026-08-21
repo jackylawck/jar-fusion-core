@@ -92,6 +92,8 @@ python -m http.server 8080
 
 本專案採用 [MIT License](https://www.google.com/search?q=LICENSE) 授權開源。歡迎教育機構、科研愛好者自由使用、修改與二次開發！
 
+---
+
 ## 🛡️ 法律合規與免責聲明 (Compliance & Disclaimers)
 * 詳閱 [法律免責聲明 (DISCLAIMER.md)](DISCLAIMER.md)
 * 詳閱 [AI 與出口管制合規評估 (COMPLIANCE.md)](COMPLIANCE.md)
