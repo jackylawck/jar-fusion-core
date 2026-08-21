@@ -66,7 +66,6 @@ for (let i = 0; i < 12; i++) {
   coreGroup.add(rib);
 }
 
-// STL 熱流密度著色器
 const stlThermalUniforms = {
   uTemp: { value: 2.5 },
   uHeatFlux: { value: 0.0 },
@@ -115,9 +114,6 @@ let currentCoreMesh = new THREE.Mesh(
 );
 coreGroup.add(currentCoreMesh);
 
-// 幾何複雜度視覺湍流權重 (0.5 ~ 2.5)
-let stlTurbulenceFactor = 1.0;
-
 // 偏濾器靶板
 const divertorMat = new THREE.MeshStandardMaterial({
   color: 0x1e293b,
@@ -156,7 +152,7 @@ for (let i = 0; i < COILS_COUNT; i++) {
 }
 
 // ========================================================
-// 3. 3D 打印 STL 載入與幾何湍流提取
+// 3. 3D 打印 STL 載入、雙向物理注入與診斷反饋
 // ========================================================
 const btnLoadStl = document.getElementById('btn-load-stl');
 const stlFileInput = document.getElementById('stl-file-input');
@@ -185,12 +181,12 @@ if (btnLoadStl && stlFileInput) {
         const maxDim = Math.max(size.x, size.y, size.z);
         const targetScale = 1.8 / maxDim;
 
-        // 計算幾何特徵並同步至物理與視覺湍流
         const triangleCount = geometry.attributes.position.count / 3;
         const aspectRatio = size.y / Math.max((size.x + size.z) / 2, 0.01);
-        stlTurbulenceFactor = Math.min(Math.max(triangleCount / 4000, 0.6), 2.4);
-
-        FusionPhysics.applyCoreGeometryModifiers(triangleCount, aspectRatio, maxDim);
+        
+        // 注入物理並取得診斷結果
+        const diagResult = FusionPhysics.applyCoreGeometryModifiers(triangleCount, aspectRatio, maxDim);
+        UI.showSTLDiagnosis(diagResult);
 
         const newStlMesh = new THREE.Mesh(geometry, stlThermalMaterial);
         newStlMesh.scale.setScalar(targetScale);
@@ -200,7 +196,7 @@ if (btnLoadStl && stlFileInput) {
         currentCoreMesh = newStlMesh;
         coreGroup.add(currentCoreMesh);
 
-        // 相機自適應構圖
+        // 自適應構圖
         const fovInRad = (camera.fov * Math.PI) / 180;
         const fitDistance = (maxDim * targetScale) / (2 * Math.tan(fovInRad / 2)) * 2.2;
         cameraTargetPos.set(0, fitDistance * 0.6, fitDistance);
@@ -208,6 +204,8 @@ if (btnLoadStl && stlFileInput) {
         controls.maxDistance = fitDistance * 3.0;
         isFramingCamera = true;
 
+        AudioSys.playTone(660, 'triangle', 0.2, 0.09);
+        setTimeout(() => AudioSys.playTone(880, 'sine', 0.35, 0.08), 120);
         if (navigator.vibrate) navigator.vibrate([40, 30, 60]);
       } catch (err) {
         console.error('STL Parsing Failed:', err);
@@ -277,7 +275,7 @@ const plasmaParticles = new THREE.Points(
 );
 coreGroup.add(plasmaParticles);
 
-// 焊接火花與閃光環
+// 焊接火花
 const activeSparks = [];
 const sparkGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, 0)]);
 const sparkMat = new THREE.PointsMaterial({ color: 0xffea00, size: 0.18, transparent: true, opacity: 1.0, blending: THREE.AdditiveBlending });
@@ -369,14 +367,13 @@ UI.init();
 GameController.init(camera);
 
 // ========================================================
-// 5. 渲染主循環
+// 5. 渲染主循環 (雙向物理同步與黑盒子記錄)
 // ========================================================
 let cameraOffset = new THREE.Vector3(0, 0, 0);
 let targetFov = 45;
 let rollAngle = 0;
 let lastTime = performance.now();
 
-// 5 秒黑盒子數據環形緩衝區
 const TELEMETRY_HISTORY_LEN = 150;
 const telemetryHistory = [];
 
@@ -385,11 +382,10 @@ function animate(now) {
   const dt = Math.min((now - lastTime) / 1000, 0.1);
   lastTime = now;
 
-  // 1. 物理步進
   FusionPhysics.update(dt);
   const st = FusionPhysics.state;
 
-  // 2. 記錄時序黑盒子
+  // 記錄 5 秒時序黑盒子
   if (!st.gameOver) {
     telemetryHistory.push({
       time: now * 0.001,
@@ -403,15 +399,14 @@ function animate(now) {
     }
   }
 
-  // 3. 遊戲控制器更新
   GameController.update(st, now, dt, coilMeshes, telemetryHistory);
 
-  // 4. 更新 STL 熱流著色器 Uniforms
+  // 更新 STL 熱流著色器 Uniforms
   stlThermalUniforms.uTemp.value = st.tempE0;
   stlThermalUniforms.uHeatFlux.value = st.kinkDistortion + (st.elmBurst ? 1.5 : 0.0);
   stlThermalUniforms.uTime.value = now * 0.001;
 
-  // 5. 長按維修
+  // 長按維修
   if (isHolding && holdTargetIndex === st.failingCoilIndex) {
     holdProgress += dt / HOLD_DURATION;
     const offset = CIRCLE_CIRCUMFERENCE * (1 - Math.min(holdProgress, 1));
@@ -426,7 +421,7 @@ function animate(now) {
     }
   }
 
-  // 6. 火花更新
+  // 火花更新
   for (let i = activeSparks.length - 1; i >= 0; i--) {
     const sp = activeSparks[i];
     sp.mesh.position.x += sp.vx * dt;
@@ -441,7 +436,7 @@ function animate(now) {
     }
   }
 
-  // 7. 閃光環
+  // 閃光環
   if (flashRing) {
     flashRing.userData.scale += dt * 15.0;
     flashRing.userData.opacity -= dt * 4.0;
@@ -453,10 +448,11 @@ function animate(now) {
     }
   }
 
-  // 8. 粒子流動更新 (修復作用域問題 + 實裝 STL 幾何湍流微擾動)
+  // 粒子流動更新 (物理-視覺雙向同步真值 stlTurbulenceMod)
   const posArr = plasmaParticles.geometry.attributes.position.array;
   const tempSpeedFactor = 1 + st.tempI0 * 0.05;
   const tSec = now * 0.001;
+  const currentTurbMod = FusionPhysics.state.stlTurbulenceMod || 1.0;
 
   for (let i = 0; i < PARTICLE_COUNT; i++) {
     const p = particleData[i];
@@ -464,8 +460,7 @@ function animate(now) {
     p.theta += p.speedTheta * localSpeed;
     p.phi += p.speedPhi * localSpeed;
 
-    // 依據 STL 粗糙度注入高頻微渦流擾動 (Turbulence Fluctuation)
-    const geoTurbulence = Math.sin(p.theta * 7.0 + p.turbulenceSeed + tSec * 4.0) * (0.035 * (stlTurbulenceFactor - 0.5));
+    const geoTurbulence = Math.sin(p.theta * 7.0 + p.turbulenceSeed + tSec * 4.0) * (0.035 * (currentTurbMod - 0.5));
     
     let elmKick = 0;
     if (st.elmBurst && p.rho > 0.7) elmKick = 0.2 * (Math.random() - 0.5);
@@ -473,15 +468,17 @@ function animate(now) {
     const wobble = Math.sin(p.theta * 3 + now * 0.005) * (st.kinkDistortion * 0.4);
     const r = MINOR_R * p.rho + wobble + elmKick + geoTurbulence;
 
-    const currentTheta = p.theta; // 顯式宣告作用域變數
+    const currentTheta = p.theta;
     posArr[i * 3] = (MAJOR_R + r * Math.cos(p.phi)) * Math.cos(currentTheta);
-    posArr[i * 3 + 1] = r * Math.sin(p.phi) * 1.5 + Math.cos(currentTheta * 2) * st.kinkDistortion * 0.2 + (geoTurbulence * 0.8);
+    posArr[i * 3 + 1] = r * Math.sin(p.phi) * 1.5 + Math.cos(currentTheta * 2) * st.kinkDistortion * 0.2 + (geoTurbulence * 0.8) + (st.deltaZ * 0.6);
     posArr[i * 3 + 2] = (MAJOR_R + r * Math.cos(p.phi)) * Math.sin(currentTheta);
   }
   plasmaParticles.geometry.attributes.position.needsUpdate = true;
 
-  // 9. 光暈與偏濾器
+  // 光暈與偏濾器
   plasmaHalo.scale.set(1 + st.kinkDistortion * 0.08, 1, 1 + st.kinkDistortion * 0.08);
+  plasmaHalo.position.y = st.deltaZ * 0.6; // 光暈跟隨 VDE 垂直偏移
+
   if (st.qGain >= 1.0) {
     plasmaHalo.material.color.setHex(0x4ade80);
     plasmaHalo.material.opacity = 0.35 + Math.sin(now * 0.008) * 0.1;
@@ -496,12 +493,12 @@ function animate(now) {
     bloomPass.strength = 1.1;
   }
 
-  const heatRatio = Math.min(st.tempE0 / 30.0, 1.0);
-  divertorMat.emissive.setRGB(heatRatio * 0.9, heatRatio * 0.2, 0.0);
-  divertorMat.emissiveIntensity = heatRatio * 0.8;
-  divertorLight.intensity = heatRatio * 2.5;
+  const heatRatio = Math.min(st.peakDivertorHeatFlux_MW_m2 / 12.0, 1.0);
+  divertorMat.emissive.setRGB(heatRatio * 0.95, heatRatio * 0.25, 0.0);
+  divertorMat.emissiveIntensity = heatRatio * 0.9;
+  divertorLight.intensity = heatRatio * 3.0;
 
-  // 10. 線圈警示
+  // 線圈警示
   coilMeshes.forEach((mesh, idx) => {
     if (idx === st.failingCoilIndex) {
       mesh.material = coilMatFail;
