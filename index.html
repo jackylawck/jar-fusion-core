@@ -63,7 +63,7 @@
   </div>
 
   <div id="ui-layer">
-    <!-- 頂部資訊與控制欄 -->
+    <!-- 頂部常駐微型欄 + 折疊選單 -->
     <div id="top-bar">
       <div id="top-header-row">
         <div id="integrity-container">
@@ -82,6 +82,12 @@
           <span class="career-stat" id="career-stat">Q: 0.00 | 0s</span>
         </div>
 
+        <!-- 頂部選單展開/收起開關 -->
+        <button id="btn-top-menu-toggle" class="btn-top-util">⚙️ <span id="lbl-menu-toggle" data-i18n="menu">選單</span></button>
+      </div>
+
+      <!-- 可折疊的次要功能抽屜（平時隱藏） -->
+      <div id="top-menu-drawer" class="top-drawer-closed">
         <div class="mode-select-wrap">
           <select id="select-mode" class="select-mode-dropdown">
             <option value="0">🟢 簡易科普</option>
@@ -89,15 +95,15 @@
             <option value="2">🔴 博士科研</option>
           </select>
         </div>
-
         <button id="btn-cert" class="btn-top-util" data-i18n="btnCert">📜 證書</button>
         <button id="btn-lang-toggle" class="btn-top-util">English</button>
         <button id="btn-hud-toggle" class="btn-top-util">👁️ <span id="lbl-hud-toggle" data-i18n="hideHud">精簡</span></button>
       </div>
+
       <div id="alert-msg"></div>
     </div>
 
-    <!-- 左側 2D 示波器抽屜 (預設收縮在左邊緣) -->
+    <!-- 左側 2D 示波器抽屜 -->
     <div id="flux-monitor" class="drawer-closed">
       <div id="flux-drawer-tab" class="drawer-tab left-tab">Ψ(R,Z)</div>
       <div class="drawer-content">
@@ -107,7 +113,7 @@
       </div>
     </div>
 
-    <!-- 右側任務 HUD 抽屜 (預設收縮在右邊緣) -->
+    <!-- 右側任務 HUD 抽屜 -->
     <div id="mission-hud" class="drawer-closed">
       <div id="mission-drawer-tab" class="drawer-tab right-tab">🎯 任務</div>
       <div class="drawer-content">
@@ -128,7 +134,6 @@
 
     <!-- 底部整合 Dock (超薄 HUD + 可折疊控制台) -->
     <div id="bottom-dock">
-      <!-- 4 大實時數據卡 -->
       <div id="hud">
         <div class="hud-card hud-card-core">
           <div class="hud-title" data-i18n="dualTemp">雙溫分離 (Te / Ti)</div>
@@ -153,12 +158,10 @@
         </div>
       </div>
 
-      <!-- 控制台折疊按鈕 -->
       <div id="dock-toggle-bar">
         <button id="btn-dock-toggle" class="btn-dock-collapse">▲ <span id="lbl-dock-toggle">控制面板</span></button>
       </div>
 
-      <!-- 控制面板 -->
       <div id="controls-panel"></div>
     </div>
   </div>
