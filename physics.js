@@ -1,5 +1,5 @@
 // =========================================================================
-// J.A.R. 聚變核心 3D - 1.5D 物理引擎 (physics.js v9.0 Pro Multi-Tier)
+// J.A.R. 聚變核心 3D - 物理與控制求解器 (physics.js v14.0 Release)
 // =========================================================================
 
 const COILS_COUNT = 10;
@@ -53,7 +53,6 @@ function solveTridiagonal(A, B, C, D, N) {
 }
 
 const FusionPhysics = {
-  // 模式：0 = 兒童簡易 (Easy), 1 = 工程標準 (Standard), 2 = 博士科研 (Research)
   gameMode: 0, 
 
   grid: {
@@ -88,16 +87,15 @@ const FusionPhysics = {
     tempI0: 0.8,
     density0: 0.5,
 
-    // 核心 9 大可調參數
-    heatECRH: 0.0,            // 1. 微波加熱 (MW)
-    heatNBI: 0.0,             // 2. 中性束注入 (MW)
-    magField: 6.0,            // 3. 環向磁場 (T)
-    plasmaCurrent: 1.2,       // 4. 等離子體電流 (MA)
-    pumpingSpeed: 10.0,       // 5. [標準] 偏濾器抽速 (m^3/s)
-    fluxExpansion: 4.5,       // 6. [標準] 磁通擴展比
-    csFluxRate: 0.5,          // 7. [科研] 中心螺線管磁通率 (V-s/s)
-    triangularityDelta: 0.35, // 8. [科研] 三角形形變度 delta
-    neonSeeding: 0.0,         // 9. [科研] 氖氣雜質輻射注入 (Pa*m3/s)
+    heatECRH: 0.0,
+    heatNBI: 0.0,
+    magField: 6.0,
+    plasmaCurrent: 1.2,
+    pumpingSpeed: 10.0,
+    fluxExpansion: 4.5,
+    csFluxRate: 0.5,
+    triangularityDelta: 0.35,
+    neonSeeding: 0.0,
 
     q95: 3.5,
     betaN: 0.2,
@@ -159,7 +157,6 @@ const FusionPhysics = {
     this.state.isOnline = !this.state.isOnline;
     if (this.state.isOnline) {
       if (this.gameMode === 0) {
-        // 兒童簡易模式：一鍵設定最完美自持穩定燃燒參數
         this.state.heatECRH = 14.0;
         this.state.heatNBI = 14.0;
         this.state.magField = 7.0;
@@ -186,11 +183,9 @@ const FusionPhysics = {
     const N = RADIAL_GRIDS;
     const dr = 1.0 / (CORE_GRIDS - 1);
 
-    // 科研模式引入雜質冷卻氣體注入 (Neon Seeding) 與幾何三角形形變度
     geo.delta = s.triangularityDelta;
     TOKAMAK_GEO.impurityFrac = 0.025 * Math.sqrt(s.stlTurbulenceMod) + s.neonSeeding * 0.01;
 
-    // 中心螺線管歐姆加熱增益
     const pOhmic = 0.08 * Math.pow(s.plasmaCurrent, 2) * Math.max(s.csFluxRate, 0.1);
     const pTotalHeat = s.heatECRH + s.heatNBI + pOhmic + s.pFusion * 0.2;
 
@@ -207,7 +202,6 @@ const FusionPhysics = {
     const chi_edge = chi_edge_nominal / Math.max(s.pedestalRecoveryFactor, 0.2);
     const chi_sol = 2.4 * turbMod;
 
-    // 偏濾器磁通擴展 (Flux Expansion) 稀釋靶板熱流
     const pSol_MW = Math.max(Math.min(pTotalHeat * 0.45, 60.0), 0.5);
     const bEff = Math.min(Math.max(s.magField, 1.2), 6.5);
     s.lambdaQ_mm = 0.63 * Math.pow(bEff, -0.77) * Math.pow(pSol_MW, 0.09) * 1e3;
@@ -403,7 +397,6 @@ const FusionPhysics = {
     this.solve1DTransportCN(dt);
     const s = this.state;
 
-    // 🟢 兒童簡易模式：直接豁免第一壁扣血，永遠穩定巡航！
     if (this.gameMode === 0) {
       s.integrity = 100.0;
       s.maxIntegrity = 100.0;
