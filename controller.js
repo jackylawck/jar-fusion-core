@@ -1,5 +1,5 @@
 // =========================================================================
-// J.A.R. 聚變核心 3D - 遊戲控制器與情感導演 (controller.js v8.3)
+// J.A.R. 聚變核心 3D - 遊戲控制器與生涯管理系統 (controller.js v10.0 Release)
 // =========================================================================
 
 const CareerManager = {
@@ -7,12 +7,14 @@ const CareerManager = {
     maxQ: 0.0,
     totalSurvivalSeconds: 0,
     missionsCompleted: 0,
-    rank: '實習操作員'
+    achievements: [],
+    tutorialPassed: false,
+    rank: '國家聚變實驗室・見習員'
   },
 
   load() {
     try {
-      const saved = localStorage.getItem('JAR_FUSION_CAREER');
+      const saved = localStorage.getItem('JAR_FUSION_CAREER_V10');
       if (saved) this.data = Object.assign(this.data, JSON.parse(saved));
     } catch(e) {}
     this.updateRank();
@@ -20,25 +22,43 @@ const CareerManager = {
 
   save() {
     try {
-      localStorage.setItem('JAR_FUSION_CAREER', JSON.stringify(this.data));
+      localStorage.setItem('JAR_FUSION_CAREER_V10', JSON.stringify(this.data));
     } catch(e) {}
   },
 
   recordMetrics(q, dt) {
     if (q > this.data.maxQ) this.data.maxQ = q;
     this.data.totalSurvivalSeconds += dt;
+    this.checkAchievements();
     this.updateRank();
     this.save();
+  },
+
+  checkAchievements() {
+    const unlock = (id, titleZh, titleEn) => {
+      if (!this.data.achievements.includes(id)) {
+        this.data.achievements.push(id);
+        const isZh = I18N.currentLang === 'zh';
+        UI.showAchievementToast(isZh ? titleZh : titleEn);
+        AudioSys.playTone(880, 'sine', 0.5, 0.12);
+      }
+    };
+
+    if (this.data.maxQ >= 1.0) unlock('IGNITION_REACHED', '🏆 成就解鎖：聚變能量增益突破 (Q ≥ 1.0)', '🏆 Achievement: Fusion Gain Breakeven (Q ≥ 1.0)');
+    if (this.data.maxQ >= 5.0) unlock('HIGH_GAIN_BURNING', '🔥 成就解鎖：超高能量燃燒 (Q ≥ 5.0)', '🔥 Achievement: High Gain Burning (Q ≥ 5.0)');
+    if (this.data.totalSurvivalSeconds >= 120) unlock('STABLE_CONFINEMENT', '⏱️ 成就解鎖：百秒超長脈衝約束', '⏱️ Achievement: 100s Long-Pulse Confinement');
   },
 
   updateRank() {
     const q = this.data.maxQ;
     const m = this.data.missionsCompleted;
     const isZh = I18N.currentLang === 'zh';
-    if (m >= 5 && q >= 1.5) this.data.rank = isZh ? '深空聚變大師' : 'Master Fusionist';
-    else if (m >= 3 && q >= 1.1) this.data.rank = isZh ? '首席工程師' : 'Chief Engineer';
-    else if (q >= 0.9) this.data.rank = isZh ? '資深操作員' : 'Senior Operator';
-    else this.data.rank = isZh ? '實習操作員' : 'Trainee Operator';
+    
+    if (m >= 5 && q >= 1.5) this.data.rank = isZh ? '國家聚變能源研究院・院長' : 'Director-General of Fusion Academy';
+    else if (m >= 3 && q >= 1.1) this.data.rank = isZh ? '托卡馬克總體技術總監' : 'Technical Director of Tokamak';
+    else if (q >= 1.0) this.data.rank = isZh ? '等離子體控制首席工程師' : 'Lead Plasma Control Specialist';
+    else if (this.data.totalSurvivalSeconds >= 30) this.data.rank = isZh ? '運行值班工程師' : 'Duty Operations Engineer';
+    else this.data.rank = isZh ? '國家聚變實驗室・見習員' : 'Junior Intern';
   }
 };
 
@@ -52,7 +72,7 @@ const DynamicMissionEngine = {
         id: 'IGNITE_PREHEAT',
         titleZh: '階段任務：核心電離預熱',
         titleEn: 'Objective: Core Ionization Preheat',
-        descZh: '啟動主電源並提升加熱使 Te ≥ 15 keV',
+        descZh: '啟動主電源並提升微波加熱使 Te ≥ 15 keV',
         descEn: 'Turn on power and heat core to Te ≥ 15 keV',
         check: (s) => s.tempE0 >= 15.0 && s.q95 > 2.2,
         targetDuration: 10.0,
@@ -253,7 +273,6 @@ const GameController = {
     UI.showVictoryModal(quest, CareerManager.data.rank);
   },
 
-  // 🟢 重啟反應爐：乾淨重置回安全待機 (滿血 100%, 0.8 keV)
   restartSimulation() {
     FusionPhysics.state.isOnline = false;
     FusionPhysics.state.tempE0 = 0.8;
