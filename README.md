@@ -85,20 +85,6 @@ This project is a non-commercial, personal endeavor created to spend quality, in
 
 ---
 
-## 🚀 快速開始 (Quick Start)
-
-無需複雜安裝環境，使用支援 WebGL 的現代瀏覽器即可執行 / No complex dependencies required, runs directly in modern WebGL browsers:
-
-```bash
-# 1. 複製專案庫 / Clone Repository
-git clone [https://github.com/jackylawck/jar-fusion-core.git](https://github.com/jackylawck/jar-fusion-core.git)
-cd jar-fusion-core
-
-# 2. 本機啟動 / Start Local Server (Python example)
-python -m http.server 8080
-
-```
-瀏覽器開啟 / Open in browser: http://localhost:8080
 ## 🗂️ 模組架構 (Architecture)
 ```text
 ├── index.html       # 應用程式入口、HUD、抽屜式選單 / App Entry & Drawer Layout
