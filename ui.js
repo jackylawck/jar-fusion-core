@@ -1,5 +1,5 @@
 // =========================================================================
-// J.A.R. 聚變核心 3D - 100% 全雙語介面與證書系統 (ui.js v15.3 Ultimate Clean)
+// J.A.R. 聚變核心 3D - 100% 全雙語介面與證書系統 (ui.js v15.4 Mobile Gold)
 // =========================================================================
 
 const I18N = {
@@ -8,7 +8,7 @@ const I18N = {
   dict: {
     zh: {
       toggleBtn: 'English',
-      btnCert: '📜 授權證書',
+      btnCert: '📜 證書',
       wallIntegrity: '第一壁狀態',
       poloidalFlux: '極向磁通量表面 Ψ(R,Z)',
       dualTemp: '雙溫分離 (Te / Ti)',
@@ -34,11 +34,13 @@ const I18N = {
       restartCore: '重啟反應爐 (回到安全待機)',
       powerStandby: '🟢 系統主電源：待機中',
       powerRunning: '🔴 系統主電源：運行中',
-      modeEasy: '🟢 簡易科普模式',
-      modeStandard: '🟡 工程標準模式',
-      modeAdvanced: '🔴 博士科研模式',
-      hideHud: '精簡視圖',
-      showHud: '完整儀表',
+      modeEasy: '🟢 簡易科普',
+      modeStandard: '🟡 工程標準',
+      modeAdvanced: '🔴 博士科研',
+      hideHud: '精簡',
+      showHud: '完整',
+      dockExpand: '▲ 控制面板',
+      dockCollapse: '▼ 收起面板',
       missionActive: 'MISSION ACTIVE',
       reportQ: '突破時 Q 值',
       reportTemp: '等離子體溫度',
@@ -98,8 +100,10 @@ const I18N = {
       modeEasy: '🟢 EASY MODE',
       modeStandard: '🟡 STANDARD (6P)',
       modeAdvanced: '🔴 RESEARCH (9P)',
-      hideHud: 'HIDE HUD',
-      showHud: 'SHOW HUD',
+      hideHud: 'COMPACT',
+      showHud: 'FULL HUD',
+      dockExpand: '▲ CONTROLS',
+      dockCollapse: '▼ HIDE DOCK',
       missionActive: 'MISSION ACTIVE',
       reportQ: 'Q at Failure',
       reportTemp: 'Core Temp',
@@ -144,6 +148,9 @@ const I18N = {
     if (dom && dom.lblHudToggle) {
       dom.lblHudToggle.innerText = UI.isHudHidden ? this.t('showHud') : this.t('hideHud');
     }
+    if (dom && dom.lblDockToggle) {
+      dom.lblDockToggle.innerText = UI.isDockCollapsed ? this.t('dockExpand') : this.t('dockCollapse');
+    }
     this.updateDropdownOptions(dom);
     CareerManager.updateRank();
 
@@ -151,7 +158,7 @@ const I18N = {
       const isZh = this.currentLang === 'zh';
       dom.careerRank.innerText = isZh ? CareerManager.data.rankZh : CareerManager.data.rankEn;
       const surviveLabel = isZh ? '存活' : 'Alive';
-      dom.careerStat.innerText = `Q_max: ${CareerManager.data.maxQ.toFixed(2)} | ${surviveLabel}: ${Math.floor(CareerManager.data.totalSurvivalSeconds)}s`;
+      dom.careerStat.innerText = `Q: ${CareerManager.data.maxQ.toFixed(2)} | ${Math.floor(CareerManager.data.totalSurvivalSeconds)}s`;
     }
 
     const q = DynamicMissionEngine.currentQuest;
@@ -199,7 +206,7 @@ const UIViewModel = {
     return {
       teText: st.tempE0.toFixed(1),
       tiText: st.tempI0.toFixed(1),
-      q95BetaText: `q: ${st.q95.toFixed(2)} | β: ${st.betaN.toFixed(2)}`,
+      q95BetaText: `q:${st.q95.toFixed(2)} | β:${st.betaN.toFixed(2)}`,
       q95BetaColor: isQUnstable ? '#ef4444' : '#38bdf8',
       qText: st.qGain.toFixed(2),
       isIgnition,
@@ -222,6 +229,7 @@ const UI = {
   _toastTimer: null,
   _currentTutStep: 0,
   isHudHidden: false,
+  isDockCollapsed: false,
 
   init() {
     this.dom = {
@@ -250,6 +258,8 @@ const UI = {
       controlsPanel: document.getElementById('controls-panel'),
       btnPower: document.getElementById('btn-power'),
       hudArea: document.getElementById('hud'),
+      btnDockToggle: document.getElementById('btn-dock-toggle'),
+      lblDockToggle: document.getElementById('lbl-dock-toggle'),
       
       careerRank: document.getElementById('career-rank'),
       careerStat: document.getElementById('career-stat'),
@@ -291,20 +301,47 @@ const UI = {
       };
     }
 
-    // 精簡視圖切換：連同左右側面板一併收起
+    // 精簡 HUD 切換：收起/顯示 4 大數據卡
     if (this.dom.btnHudToggle) {
       this.dom.btnHudToggle.onclick = () => {
         this.isHudHidden = !this.isHudHidden;
         this.dom.hudArea.style.display = this.isHudHidden ? 'none' : 'grid';
 
-        const fluxMon = document.getElementById('flux-monitor');
-        const missionHud = document.getElementById('mission-hud');
-        if (fluxMon) fluxMon.style.display = this.isHudHidden ? 'none' : 'flex';
-        if (missionHud) missionHud.style.display = this.isHudHidden ? 'none' : 'block';
-
         if (this.dom.lblHudToggle) {
           this.dom.lblHudToggle.innerText = this.isHudHidden ? I18N.t('showHud') : I18N.t('hideHud');
         }
+      };
+    }
+
+    // 控制台折疊切換
+    if (this.dom.btnDockToggle) {
+      this.dom.btnDockToggle.onclick = () => {
+        this.isDockCollapsed = !this.isDockCollapsed;
+        this.dom.controlsPanel.classList.toggle('collapsed', this.isDockCollapsed);
+        this.dom.lblDockToggle.innerText = this.isDockCollapsed ? I18N.t('dockExpand') : I18N.t('dockCollapse');
+      };
+    }
+
+    // 抽屜點擊展開/收起
+    const fluxDrawer = document.getElementById('flux-monitor');
+    const fluxTab = document.getElementById('flux-drawer-tab');
+    if (fluxTab && fluxDrawer) {
+      fluxTab.onclick = (e) => {
+        e.stopPropagation();
+        const isClosed = fluxDrawer.classList.contains('drawer-closed');
+        fluxDrawer.classList.toggle('drawer-closed', !isClosed);
+        fluxDrawer.classList.toggle('drawer-open', isClosed);
+      };
+    }
+
+    const missionDrawer = document.getElementById('mission-hud');
+    const missionTab = document.getElementById('mission-drawer-tab');
+    if (missionTab && missionDrawer) {
+      missionTab.onclick = (e) => {
+        e.stopPropagation();
+        const isClosed = missionDrawer.classList.contains('drawer-closed');
+        missionDrawer.classList.toggle('drawer-closed', !isClosed);
+        missionDrawer.classList.toggle('drawer-open', isClosed);
       };
     }
 
@@ -761,7 +798,7 @@ const UI = {
     ctx.lineWidth = 1.5;
     ctx.beginPath();
     for (let a = 0; a <= Math.PI * 2; a += 0.1) {
-      const rWall = 60;
+      const rWall = 55;
       const x = cx + (rWall * Math.cos(a + delta * Math.sin(a)));
       const y = (h / 2) + (rWall * dynamicKappa * Math.sin(a));
       if (a === 0) ctx.moveTo(x, y);
@@ -772,8 +809,8 @@ const UI = {
 
     for (let i = 1; i <= numSurfaces; i++) {
       const rho = i / numSurfaces;
-      const r = (50 * dynamicRScale + pulse * (1 - rho)) * rho;
-      const shiftX = (shafranovShift * 60) * (1 - Math.pow(rho, 2));
+      const r = (45 * dynamicRScale + pulse * (1 - rho)) * rho;
+      const shiftX = (shafranovShift * 50) * (1 - Math.pow(rho, 2));
 
       ctx.strokeStyle = i === numSurfaces ? '#38bdf8' : `rgba(0, 240, 255, ${0.15 + rho * 0.45})`;
       ctx.lineWidth = i === numSurfaces ? 1.5 : 1.0;
@@ -793,7 +830,7 @@ const UI = {
     ctx.shadowColor = '#f43f5e';
     ctx.shadowBlur = FusionPhysics.state.isOnline ? 8 : 0;
     ctx.beginPath();
-    ctx.arc(cx + shafranovShift * 60, cy, 3.5, 0, Math.PI * 2);
+    ctx.arc(cx + shafranovShift * 50, cy, 3.0, 0, Math.PI * 2);
     ctx.fill();
     ctx.shadowBlur = 0;
   },
@@ -829,8 +866,7 @@ const UI = {
 
     const isZh = I18N.currentLang === 'zh';
     d.careerRank.innerText = isZh ? CareerManager.data.rankZh : CareerManager.data.rankEn;
-    const surviveLabel = isZh ? '存活' : 'Alive';
-    d.careerStat.innerText = `Q_max: ${CareerManager.data.maxQ.toFixed(2)} | ${surviveLabel}: ${Math.floor(CareerManager.data.totalSurvivalSeconds)}s`;
+    d.careerStat.innerText = `Q: ${CareerManager.data.maxQ.toFixed(2)} | ${Math.floor(CareerManager.data.totalSurvivalSeconds)}s`;
 
     const q = DynamicMissionEngine.currentQuest;
     if (q) {
