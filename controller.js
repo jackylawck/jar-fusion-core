@@ -1,20 +1,22 @@
 // =========================================================================
-// J.A.R. 聚變核心 3D - 遊戲控制器與生涯管理系統 (controller.js v10.0 Release)
+// J.A.R. 聚變核心 3D - 遊戲控制器與敘事導演系統 (controller.js v11.0)
 // =========================================================================
 
 const CareerManager = {
   data: {
+    pilotId: 'JAR-' + Math.floor(1000 + Math.random() * 9000),
     maxQ: 0.0,
     totalSurvivalSeconds: 0,
     missionsCompleted: 0,
     achievements: [],
     tutorialPassed: false,
-    rank: '國家聚變實驗室・見習員'
+    rankZh: '國家聚變實驗室・見習員',
+    rankEn: 'Junior Intern'
   },
 
   load() {
     try {
-      const saved = localStorage.getItem('JAR_FUSION_CAREER_V10');
+      const saved = localStorage.getItem('JAR_FUSION_CAREER_V11');
       if (saved) this.data = Object.assign(this.data, JSON.parse(saved));
     } catch(e) {}
     this.updateRank();
@@ -22,7 +24,7 @@ const CareerManager = {
 
   save() {
     try {
-      localStorage.setItem('JAR_FUSION_CAREER_V10', JSON.stringify(this.data));
+      localStorage.setItem('JAR_FUSION_CAREER_V11', JSON.stringify(this.data));
     } catch(e) {}
   },
 
@@ -45,58 +47,74 @@ const CareerManager = {
     };
 
     if (this.data.maxQ >= 1.0) unlock('IGNITION_REACHED', '🏆 成就解鎖：聚變能量增益突破 (Q ≥ 1.0)', '🏆 Achievement: Fusion Gain Breakeven (Q ≥ 1.0)');
-    if (this.data.maxQ >= 5.0) unlock('HIGH_GAIN_BURNING', '🔥 成就解鎖：超高能量燃燒 (Q ≥ 5.0)', '🔥 Achievement: High Gain Burning (Q ≥ 5.0)');
-    if (this.data.totalSurvivalSeconds >= 120) unlock('STABLE_CONFINEMENT', '⏱️ 成就解鎖：百秒超長脈衝約束', '⏱️ Achievement: 100s Long-Pulse Confinement');
+    if (this.data.maxQ >= 5.0) unlock('HIGH_GAIN_BURNING', '🔥 成就解鎖：超高能量自持燃燒 (Q ≥ 5.0)', '🔥 Achievement: High-Gain Burning (Q ≥ 5.0)');
+    if (this.data.totalSurvivalSeconds >= 120) unlock('STABLE_CONFINEMENT', '⏱️ 成就解鎖：百秒超長脈衝磁約束', '⏱️ Achievement: 100s Long-Pulse Confinement');
   },
 
   updateRank() {
     const q = this.data.maxQ;
     const m = this.data.missionsCompleted;
-    const isZh = I18N.currentLang === 'zh';
     
-    if (m >= 5 && q >= 1.5) this.data.rank = isZh ? '國家聚變能源研究院・院長' : 'Director-General of Fusion Academy';
-    else if (m >= 3 && q >= 1.1) this.data.rank = isZh ? '托卡馬克總體技術總監' : 'Technical Director of Tokamak';
-    else if (q >= 1.0) this.data.rank = isZh ? '等離子體控制首席工程師' : 'Lead Plasma Control Specialist';
-    else if (this.data.totalSurvivalSeconds >= 30) this.data.rank = isZh ? '運行值班工程師' : 'Duty Operations Engineer';
-    else this.data.rank = isZh ? '國家聚變實驗室・見習員' : 'Junior Intern';
+    if (m >= 5 && q >= 1.5) {
+      this.data.rankZh = '國家聚變能源研究院・院長';
+      this.data.rankEn = 'Director-General of Fusion Academy';
+    } else if (m >= 3 && q >= 1.1) {
+      this.data.rankZh = '托卡馬克總體技術總監';
+      this.data.rankEn = 'Technical Director of Tokamak';
+    } else if (q >= 1.0) {
+      this.data.rankZh = '等離子體控制首席工程師';
+      this.data.rankEn = 'Lead Plasma Control Specialist';
+    } else if (this.data.totalSurvivalSeconds >= 30) {
+      this.data.rankZh = '運行值班工程師';
+      this.data.rankEn = 'Duty Operations Engineer';
+    } else {
+      this.data.rankZh = '國家聚變實驗室・見習員';
+      this.data.rankEn = 'Junior Intern';
+    }
   }
 };
 
+// --- 具備深空情感敘事與自適應動態難度的任務引擎 ---
 const DynamicMissionEngine = {
   currentQuest: null,
   timer: 0,
 
   generateQuest(st) {
+    // 依據玩家完成任務數量動態自適應上調目標 (Adaptive Difficulty Scaling)
+    const diffMultiplier = 1.0 + Math.min(CareerManager.data.missionsCompleted * 0.05, 0.4);
+
     if (st.tempE0 < 10.0) {
+      const targetT = 15.0 * diffMultiplier;
       return {
-        id: 'IGNITE_PREHEAT',
-        titleZh: '階段任務：核心電離預熱',
-        titleEn: 'Objective: Core Ionization Preheat',
-        descZh: '啟動主電源並提升微波加熱使 Te ≥ 15 keV',
-        descEn: 'Turn on power and heat core to Te ≥ 15 keV',
-        check: (s) => s.tempE0 >= 15.0 && s.q95 > 2.2,
+        id: 'LUNAR_GRID_PREHEAT',
+        titleZh: '危機任務：月面阿爾忒彌斯基地電網瀕臨崩潰',
+        titleEn: 'Mission: Artemis Lunar Grid Blackout Imminent',
+        descZh: `預熱核心並使電子溫度 Te ≥ ${targetT.toFixed(1)} keV，重啟深空基地供電回路。`,
+        descEn: `Preheat core until Te ≥ ${targetT.toFixed(1)} keV to restore lunar life support.`,
+        check: (s) => s.tempE0 >= targetT && s.q95 > 2.2,
         targetDuration: 10.0,
         currentProgress: 0.0
       };
     } else if (st.isHMode && st.betaN > 2.2) {
       return {
-        id: 'ELM_SURVIVE',
-        titleZh: '緊急應變：邊緣輸運壘洩放',
-        titleEn: 'Warning: Relieve ETB Pressure Barrier',
-        descZh: '開啟偏濾器排熱將 β_N 控制在 2.4 以下',
-        descEn: 'Purge divertor to keep β_N < 2.4 to prevent ELM',
+        id: 'SOLAR_STORM_DEFENSE',
+        titleZh: '緊急應變：強烈太陽風暴引發邊緣等離子體高壓',
+        titleEn: 'Alert: Relieve Solar Flare Overpressure Shock',
+        descZh: '啟動偏濾器排熱將 β_N 壓制在 2.4 以下，避免邊緣破裂損毀磁體。',
+        descEn: 'Purge divertor to keep β_N < 2.4 to protect coils from solar shockwave.',
         check: (s) => s.betaN < 2.4 && s.qGain > 0.8,
         targetDuration: 12.0,
         currentProgress: 0.0
       };
     } else {
+      const targetQ = 1.05 * diffMultiplier;
       return {
-        id: 'SUSTAINED_BURNING',
-        titleZh: '終極目標：實現自持燃燒點火',
-        titleEn: 'Ultimate: Achieve Burning Plasma',
-        descZh: '保持能量增益 Q ≥ 1.05 超過 15 秒',
-        descEn: 'Maintain Fusion Gain Q ≥ 1.05 for 15s',
-        check: (s) => s.qGain >= 1.05,
+        id: 'DEEP_SPACE_IGNITION',
+        titleZh: '終極使命：全人類首座深空微型太陽點火',
+        titleEn: 'Ultimate: Ignite Humanity First Deep-Space Sun',
+        descZh: `維持自持燃燒增益 Q ≥ ${targetQ.toFixed(2)} 超過 15 秒，締造能源奇蹟。`,
+        descEn: `Maintain self-sustained gain Q ≥ ${targetQ.toFixed(2)} for 15s to make history.`,
+        check: (s) => s.qGain >= targetQ,
         targetDuration: 15.0,
         currentProgress: 0.0
       };
@@ -270,7 +288,7 @@ const GameController = {
   triggerMissionVictory(quest) {
     CareerManager.updateRank();
     AudioSys.playIgnitionFanfare();
-    UI.showVictoryModal(quest, CareerManager.data.rank);
+    UI.showVictoryModal(quest, (I18N.currentLang === 'zh' ? CareerManager.data.rankZh : CareerManager.data.rankEn));
   },
 
   restartSimulation() {
