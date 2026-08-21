@@ -1,5 +1,5 @@
 // =========================================================================
-// J.A.R. 聚變核心 3D - 遊戲控制器與情感導演系統 (GameController v8.0)
+// J.A.R. 聚變核心 3D - 遊戲控制器與情感導演 (controller.js v8.3)
 // =========================================================================
 
 const CareerManager = {
@@ -34,10 +34,11 @@ const CareerManager = {
   updateRank() {
     const q = this.data.maxQ;
     const m = this.data.missionsCompleted;
-    if (m >= 5 && q >= 1.5) this.data.rank = '深空聚變大師 (Master)';
-    else if (m >= 3 && q >= 1.1) this.data.rank = '托卡馬克首席工程師 (Chief)';
-    else if (q >= 0.9) this.data.rank = '資深值班操作員 (Senior)';
-    else this.data.rank = '實習操作員 (Trainee)';
+    const isZh = I18N.currentLang === 'zh';
+    if (m >= 5 && q >= 1.5) this.data.rank = isZh ? '深空聚變大師' : 'Master Fusionist';
+    else if (m >= 3 && q >= 1.1) this.data.rank = isZh ? '首席工程師' : 'Chief Engineer';
+    else if (q >= 0.9) this.data.rank = isZh ? '資深操作員' : 'Senior Operator';
+    else this.data.rank = isZh ? '實習操作員' : 'Trainee Operator';
   }
 };
 
@@ -51,32 +52,32 @@ const DynamicMissionEngine = {
         id: 'IGNITE_PREHEAT',
         titleZh: '階段任務：核心電離預熱',
         titleEn: 'Objective: Core Ionization Preheat',
-        descZh: '提升微波加熱使 Te ≥ 15 keV，且維持 q95 > 2.5',
-        descEn: 'Heat core to Te ≥ 15 keV while keeping q95 > 2.5',
-        check: (s) => s.tempE0 >= 15.0 && s.q95 > 2.5,
-        targetDuration: 12.0,
+        descZh: '啟動主電源並提升加熱使 Te ≥ 15 keV',
+        descEn: 'Turn on power and heat core to Te ≥ 15 keV',
+        check: (s) => s.tempE0 >= 15.0 && s.q95 > 2.2,
+        targetDuration: 10.0,
         currentProgress: 0.0
       };
     } else if (st.isHMode && st.betaN > 2.2) {
       return {
         id: 'ELM_SURVIVE',
-        titleZh: '緊急應變：邊緣輸運壘壓力洩放',
+        titleZh: '緊急應變：邊緣輸運壘洩放',
         titleEn: 'Warning: Relieve ETB Pressure Barrier',
-        descZh: '控制偏濾器將 β_N 穩定在 2.4 以下，避免觸發 Type-I ELM',
-        descEn: 'Purge divertor to keep β_N < 2.4 to prevent ELM burst',
+        descZh: '開啟偏濾器排熱將 β_N 控制在 2.4 以下',
+        descEn: 'Purge divertor to keep β_N < 2.4 to prevent ELM',
         check: (s) => s.betaN < 2.4 && s.qGain > 0.8,
-        targetDuration: 15.0,
+        targetDuration: 12.0,
         currentProgress: 0.0
       };
     } else {
       return {
         id: 'SUSTAINED_BURNING',
         titleZh: '終極目標：實現自持燃燒點火',
-        titleEn: 'Ultimate: Achieve Self-Sustained Burning',
-        descZh: '保持能量增益 Q ≥ 1.10 超過 20 秒',
-        descEn: 'Maintain Fusion Gain Q ≥ 1.10 for 20s',
-        check: (s) => s.qGain >= 1.10,
-        targetDuration: 20.0,
+        titleEn: 'Ultimate: Achieve Burning Plasma',
+        descZh: '保持能量增益 Q ≥ 1.05 超過 15 秒',
+        descEn: 'Maintain Fusion Gain Q ≥ 1.05 for 15s',
+        check: (s) => s.qGain >= 1.05,
+        targetDuration: 15.0,
         currentProgress: 0.0
       };
     }
@@ -98,7 +99,7 @@ const DynamicMissionEngine = {
         this.currentQuest = this.generateQuest(st);
       }
     } else {
-      q.currentProgress = Math.max(0, q.currentProgress - dt * 0.6);
+      q.currentProgress = Math.max(0, q.currentProgress - dt * 0.5);
     }
   },
 
@@ -110,34 +111,35 @@ const DynamicMissionEngine = {
 
 const IncidentAnalyzer = {
   analyze(st) {
-    let cause = '未知物理失穩';
-    let advice = '請保持各項參數在綠色安全區間內運行。';
+    const isZh = I18N.currentLang === 'zh';
+    let cause = isZh ? '未知物理失穩' : 'Unidentified Physical Disruption';
+    let advice = isZh ? '請保持各項參數在綠色安全區間內運行。' : 'Maintain plasma parameters within the stable operational window.';
     let triggerMetric = '';
 
     if (st.deltaZ > 0.35) {
-      cause = 'VDE 垂直位移不穩定性撞壁 (Vertical Displacement Collision)';
-      advice = '等離子體伸長率過高且極向控制線圈飽和。請在加熱時保持等離子體電流 I_p 穩定。';
-      triggerMetric = `δZ = ${st.deltaZ.toFixed(2)}m (極限: 0.35m)`;
+      cause = isZh ? 'VDE 垂直位移不穩定性撞壁' : 'VDE Vertical Displacement Wall Collision';
+      advice = isZh ? '等離子體伸長率過高且極向控制飽和。請保持電流 I_p 穩定。' : 'Elongation too high; control coils saturated. Stabilize plasma current.';
+      triggerMetric = `δZ = ${st.deltaZ.toFixed(2)}m`;
     } else if (st.peakDivertorHeatFlux_MW_m2 > 12.0) {
-      cause = '偏濾器靶板 Eich 熱流通量超限融毀 (Divertor Heatflux Exhaust Failure)';
-      advice = '刮削層 λ_q 過窄導致靶板局部熱流過載。請適時開啟偏濾器排氣或提高環向磁場 B_T。';
-      triggerMetric = `q_div = ${st.peakDivertorHeatFlux_MW_m2.toFixed(1)} MW/m² (極限: 12.0)`;
+      cause = isZh ? '偏濾器靶板熱流通量超限融毀' : 'Divertor Heatflux Exhaust Failure';
+      advice = isZh ? '刮削層過窄導致靶板過熱。請開啟偏濾器排氣或提高 B_T。' : 'SOL width too narrow. Purge divertor exhaust or increase B_T.';
+      triggerMetric = `q_div = ${st.peakDivertorHeatFlux_MW_m2.toFixed(1)} MW/m²`;
     } else if (st.q95 < 2.0) {
-      cause = 'q95 < 2.0 MHD 撕裂模大破裂 (Kink Tearing Disruption)';
-      advice = '等離子體電流 Ip 過高導致磁力線失穩。請提高環向磁場 B_T 或下調電流。';
-      triggerMetric = `q95 = ${st.q95.toFixed(2)} (臨界值: 2.0)`;
+      cause = isZh ? 'q95 < 2.0 MHD 撕裂模大破裂' : 'q95 < 2.0 MHD Tearing Mode Disruption';
+      advice = isZh ? '等離子體電流 Ip 過高。請提高環向磁場 B_T 或下調電流。' : 'Current Ip too high. Increase Toroidal Field B_T or decrease Ip.';
+      triggerMetric = `q95 = ${st.q95.toFixed(2)}`;
     } else if (st.betaN > 2.8) {
-      cause = 'Troyon β_N 壓力極限突破 (Troyon Limit Exceeded)';
-      advice = '等離子體熱壓力過大引發邊緣失穩。在加熱功率接近臨界值時，應及時開啟偏濾器排熱。';
-      triggerMetric = `β_N = ${st.betaN.toFixed(2)} (臨界值: 2.8)`;
+      cause = isZh ? 'Troyon β_N 壓力極限突破' : 'Troyon β_N Pressure Limit Exceeded';
+      advice = isZh ? '等離子體熱壓力過大。加熱功率過高時請及時開啟偏濾器排熱。' : 'Thermal pressure too high. Purge divertor when heating close to limits.';
+      triggerMetric = `β_N = ${st.betaN.toFixed(2)}`;
     } else if (st.greenwaldRatio > 1.0) {
-      cause = '格林沃德密度超限引發輻射坍縮 (Greenwald Collapse)';
-      advice = '燃料注入過多導致等離子體猝滅。請減少燃料注入頻率或提高加熱功率。';
-      triggerMetric = `n/n_G = ${st.greenwaldRatio.toFixed(2)} (臨界值: 1.0)`;
+      cause = isZh ? '格林沃德密度超限輻射坍縮' : 'Greenwald Limit Density Collapse';
+      advice = isZh ? '燃料注入過多導致等離子體猝滅。請減少燃料注入頻率。' : 'Over-fueling quenched plasma. Reduce fuel pellet injection frequency.';
+      triggerMetric = `n/n_G = ${st.greenwaldRatio.toFixed(2)}`;
     } else if (st.maxIntegrity <= 0) {
-      cause = '第一壁材料累積熱疲勞融毀 (First Wall Melted)';
-      advice = '第一壁長時間承受高溫熱流衝擊。下次請在失穩發生時第一時間長按故障線圈修復。';
-      triggerMetric = `Integrity = 0.0%`;
+      cause = isZh ? '第一壁材料累積熱疲勞融毀' : 'First Wall Cumulative Thermal Failure';
+      advice = isZh ? '第一壁承受長時間高溫。失穩時請第一時間長按故障線圈維修。' : 'First wall melted. Hold-to-repair failing coils immediately when alerted.';
+      triggerMetric = `Integrity = 0%`;
     }
 
     return {
@@ -191,7 +193,7 @@ const GameController = {
     if (this.camera) AudioSys.updateListener(this.camera);
     AudioSys.updateSoundscape(st);
 
-    if (!st.gameOver) {
+    if (st.isOnline && !st.gameOver) {
       DynamicMissionEngine.update(st, dt);
       CareerManager.recordMetrics(st.qGain, dt);
     }
@@ -251,8 +253,17 @@ const GameController = {
     UI.showVictoryModal(quest, CareerManager.data.rank);
   },
 
+  // 🟢 重啟反應爐：乾淨重置回安全待機 (滿血 100%, 0.8 keV)
   restartSimulation() {
-    FusionPhysics.initProfiles();
+    FusionPhysics.state.isOnline = false;
+    FusionPhysics.state.tempE0 = 0.8;
+    FusionPhysics.state.tempI0 = 0.8;
+    FusionPhysics.state.density0 = 0.5;
+    FusionPhysics.state.heatECRH = 0.0;
+    FusionPhysics.state.heatNBI = 0.0;
+    FusionPhysics.state.magField = 6.0;
+    FusionPhysics.state.plasmaCurrent = 1.2;
+
     FusionPhysics.state.integrity = 100.0;
     FusionPhysics.state.maxIntegrity = 100.0;
     FusionPhysics.state.kinkDistortion = 0.0;
@@ -261,9 +272,12 @@ const GameController = {
     FusionPhysics.state.failingCoilIndex = -1;
     FusionPhysics.state.gameOver = false;
 
+    FusionPhysics.initProfiles();
+
     this.hasDisrupted = false;
     this.hasIgnited = false;
     DynamicMissionEngine.reset();
+    UI.resetControlsToStandby();
     UI.hideModals();
   },
 
