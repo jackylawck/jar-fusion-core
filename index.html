@@ -2,7 +2,7 @@
 <html lang="zh-HK">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, shrink-to-fit=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, shrink-to-fit=no, viewport-fit=cover">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="mobile-web-app-capable" content="yes">
@@ -53,7 +53,7 @@
   <div id="atmosphere-glow"></div>
   <div id="scanlines"></div>
 
-  <!-- 維修 HUD -->
+  <!-- 線圈維修 HUD -->
   <div id="repair-hud" class="hidden">
     <svg class="progress-ring" width="90" height="90">
       <circle class="progress-ring__circle-bg" stroke="#1e293b" stroke-width="6" fill="transparent" r="36" cx="45" cy="45"/>
@@ -63,7 +63,7 @@
   </div>
 
   <div id="ui-layer">
-    <!-- 頂部資訊與控制欄 (精簡標題，絕不擠壓重疊) -->
+    <!-- 頂部資訊與控制欄 -->
     <div id="top-bar">
       <div id="top-header-row">
         <div id="integrity-container">
@@ -79,49 +79,56 @@
 
         <div id="career-badge">
           <span class="career-title" id="career-rank">見習操作員</span>
-          <span class="career-stat" id="career-stat">Q_max: 0.00 | 存活: 0s</span>
+          <span class="career-stat" id="career-stat">Q: 0.00 | 0s</span>
         </div>
 
         <div class="mode-select-wrap">
           <select id="select-mode" class="select-mode-dropdown">
-            <option value="0">🟢 簡易科普模式</option>
-            <option value="1">🟡 工程標準模式</option>
-            <option value="2">🔴 博士科研模式</option>
+            <option value="0">🟢 簡易科普</option>
+            <option value="1">🟡 工程標準</option>
+            <option value="2">🔴 博士科研</option>
           </select>
         </div>
 
-        <button id="btn-cert" class="btn-top-util" data-i18n="btnCert">📜 授權證書</button>
+        <button id="btn-cert" class="btn-top-util" data-i18n="btnCert">📜 證書</button>
         <button id="btn-lang-toggle" class="btn-top-util">English</button>
-        <button id="btn-hud-toggle" class="btn-top-util">👁️ <span id="lbl-hud-toggle" data-i18n="hideHud">精簡視圖</span></button>
+        <button id="btn-hud-toggle" class="btn-top-util">👁️ <span id="lbl-hud-toggle" data-i18n="hideHud">精簡</span></button>
       </div>
       <div id="alert-msg"></div>
     </div>
 
-    <!-- 右上角任務 HUD -->
-    <div id="mission-hud">
-      <div class="mission-header">
-        <span class="mission-tag" data-i18n="missionActive">MISSION ACTIVE</span>
-        <span id="mission-timer">00:45</span>
+    <!-- 左側 2D 示波器抽屜 (預設收縮在左邊緣) -->
+    <div id="flux-monitor" class="drawer-closed">
+      <div id="flux-drawer-tab" class="drawer-tab left-tab">Ψ(R,Z)</div>
+      <div class="drawer-content">
+        <div class="monitor-title" data-i18n="poloidalFlux">極向磁通量表面 Ψ(R,Z)</div>
+        <canvas id="fluxCanvas" width="130" height="160"></canvas>
+        <div class="monitor-foot" id="flux-info">κ: 1.75 | δZ: 0.00m</div>
       </div>
-      <div class="mission-name" id="mission-name">任務：為月面基地應急電網供電</div>
-      <div class="mission-desc" id="mission-desc">啟動反應堆並保持 Q ≥ 1.05，拯救 4,200 名月面科研人員</div>
-      <div class="mission-progress-row">
-        <div class="mission-progress-bar-bg">
-          <div id="mission-progress-bar"></div>
+    </div>
+
+    <!-- 右側任務 HUD 抽屜 (預設收縮在右邊緣) -->
+    <div id="mission-hud" class="drawer-closed">
+      <div id="mission-drawer-tab" class="drawer-tab right-tab">🎯 任務</div>
+      <div class="drawer-content">
+        <div class="mission-header">
+          <span class="mission-tag" data-i18n="missionActive">MISSION ACTIVE</span>
+          <span id="mission-timer">00:45</span>
         </div>
-        <span id="mission-pct-label">0%</span>
+        <div class="mission-name" id="mission-name">任務：為月面基地應急電網供電</div>
+        <div class="mission-desc" id="mission-desc">啟動反應堆並保持 Q ≥ 1.05，拯救 4,200 名月面科研人員</div>
+        <div class="mission-progress-row">
+          <div class="mission-progress-bar-bg">
+            <div id="mission-progress-bar"></div>
+          </div>
+          <span id="mission-pct-label">0%</span>
+        </div>
       </div>
     </div>
 
-    <!-- 左側 2D 磁通量示波器 -->
-    <div id="flux-monitor">
-      <div class="monitor-title" data-i18n="poloidalFlux">極向磁通量表面 Ψ(R,Z)</div>
-      <canvas id="fluxCanvas" width="160" height="200"></canvas>
-      <div class="monitor-foot" id="flux-info">κ: 1.75 | δZ: 0.00m</div>
-    </div>
-
-    <!-- 底部整合 Dock -->
+    <!-- 底部整合 Dock (超薄 HUD + 可折疊控制台) -->
     <div id="bottom-dock">
+      <!-- 4 大實時數據卡 -->
       <div id="hud">
         <div class="hud-card hud-card-core">
           <div class="hud-title" data-i18n="dualTemp">雙溫分離 (Te / Ti)</div>
@@ -146,7 +153,12 @@
         </div>
       </div>
 
-      <!-- 動態控制面板 -->
+      <!-- 控制台折疊按鈕 -->
+      <div id="dock-toggle-bar">
+        <button id="btn-dock-toggle" class="btn-dock-collapse">▲ <span id="lbl-dock-toggle">控制面板</span></button>
+      </div>
+
+      <!-- 控制面板 -->
       <div id="controls-panel"></div>
     </div>
   </div>
@@ -199,7 +211,7 @@
     </div>
   </div>
 
-  <!-- 📜 國家級聚變操作員資格證書 -->
+  <!-- 官方執照證書 -->
   <div id="cert-modal" class="modal-overlay hidden">
     <div class="modal-card cert-card">
       <div class="modal-header">
