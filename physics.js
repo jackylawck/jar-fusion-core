@@ -1,7 +1,10 @@
 // =========================================================================
-// J.A.R. 聚變核心 3D - 科研級 1D 徑向輸運與 MHD 穩定性求解器 (physics.js v4.0)
-// 特性：1D 徑向有限差分離散、Bosch-Hale 反應率、自洽雜質冷卻 (Z_eff)、
-//      Rutherford 磁島寬度演化、ETB 週期性崩塌 (Type-I ELM)、自洽冷卻顆粒注入
+// J.A.R. 聚變核心 3D - 1.5D 平衡/輸運/MHD 耦合求解器 (physics.js v5.0 Master)
+// 特性：
+// 1. Crank-Nicolson 半隱式 + Thomas Algorithm (三對角求解) 1D 徑向輸運
+// 2. Rutherford 磁島拓撲平坦化與 q(r) 自洽耦合 (q=2 共振面磁島)
+// 3. 自洽 ETB 重建時間常數 (Pedestal Sawtooth Dynamics)
+// 4. 高拉長比垂直位移不穩定性 (Vertical Displacement Event, VDE)
 // =========================================================================
 
 const COILS_COUNT = 10;
@@ -13,11 +16,11 @@ const TOKAMAK_GEO = {
   kappa: 1.75,   // 伸長率
   delta: 0.35,   // 三角形形變度
   volume: 20.5,  // 真空室等效體積 (m^3)
-  Z_eff: 1.65,   // 雜質有效電荷數 (考慮碳/鎢壁雜質)
-  impurityFrac: 0.025 // 雜質濃度比例 (2.5%)
+  Z_eff: 1.65,   // 雜質有效電荷數
+  impurityFrac: 0.025
 };
 
-// 1. Bosch-Hale (1992) D-T 聚變反應截面參數化
+// 1. Bosch-Hale (1992) 反應截面參數化
 function getBoschHaleSigmaV(Ti_keV) {
   if (Ti_keV < 0.2) return 0;
   const T = Math.min(Ti_keV, 100);
@@ -31,26 +34,46 @@ function getBoschHaleSigmaV(Ti_keV) {
   return isNaN(sigV) ? 0 : sigV;
 }
 
+// 2. 三對角矩陣追趕法求解器 (Thomas Algorithm) - O(N) 複雜度
+function solveTridiagonal(A, B, C, D, N) {
+  const cPrime = new Float32Array(N);
+  const dPrime = new Float32Array(N);
+  const X = new Float32Array(N);
+
+  cPrime[0] = C[0] / B[0];
+  dPrime[0] = D[0] / B[0];
+
+  for (let i = 1; i < N; i++) {
+    const denom = B[i] - A[i] * cPrime[i - 1];
+    cPrime[i] = C[i] / denom;
+    dPrime[i] = (D[i] - A[i] * dPrime[i - 1]) / denom;
+  }
+
+  X[N - 1] = dPrime[N - 1];
+  for (let i = N - 2; i >= 0; i--) {
+    X[i] = dPrime[i] - cPrime[i] * X[i + 1];
+  }
+  return X;
+}
+
 const FusionPhysics = {
-  // 1D 網格物理場 (rho = r/a, 0 為磁軸, 1 為邊緣截面)
   grid: {
     rho: new Float32Array(RADIAL_GRIDS),
-    Te: new Float32Array(RADIAL_GRIDS),     // 電子溫度 (keV)
-    Ti: new Float32Array(RADIAL_GRIDS),     // 離子溫度 (keV)
-    n: new Float32Array(RADIAL_GRIDS),      // 電子/離子密度 (10^20 m^-3)
-    qProfile: new Float32Array(RADIAL_GRIDS)// 安全因子剖面 q(r)
+    Te: new Float32Array(RADIAL_GRIDS),
+    Ti: new Float32Array(RADIAL_GRIDS),
+    n: new Float32Array(RADIAL_GRIDS),
+    qProfile: new Float32Array(RADIAL_GRIDS)
   },
 
   state: {
-    // 監控與 HUD 映射標量
     tempE0: 2.5,
     tempI0: 1.8,
     density0: 1.2,
     magField: 6.0,
     plasmaCurrent: 1.2,
 
-    heatECRH: 10.0, // MW (沉積於 core rho < 0.3)
-    heatNBI: 10.0,  // MW (沉積於 mid-core rho < 0.6)
+    heatECRH: 10.0,
+    heatNBI: 10.0,
 
     q95: 3.5,
     betaN: 1.2,
@@ -61,17 +84,19 @@ const FusionPhysics = {
     isHMode: false,
     elmBurst: false,
 
-    // MHD 撕裂模與磁島動態 (Rutherford Equation)
-    magneticIslandWidth: 0.0, // 歸一化磁島寬度 w/a
+    // MHD 撕裂模與磁島拓撲
+    magneticIslandWidth: 0.0,
     kinkDistortion: 0.0,
-    kinkTimer: 0.0,
     failingCoilIndex: -1,
 
-    // ETB 與 ELM 週期性崩塌積分器
+    // ETB 與 ELM 週期性重建動力學
     pedestalPressure: 0.0,
-    elmTimer: 0.0,
+    pedestalRecoveryFactor: 1.0,
 
-    // 第一壁材料完整度
+    // 垂直位移不穩定性 (VDE)
+    deltaZ: 0.0,          // 垂直軸向位移 (m)
+    vdeGrowthRate: 0.0,   // 垂直增長率 (s^-1)
+
     maxIntegrity: 100.0,
     integrity: 100.0,
     gameOver: false
@@ -82,124 +107,124 @@ const FusionPhysics = {
     for (let i = 0; i < RADIAL_GRIDS; i++) {
       const r = i * dr;
       this.grid.rho[i] = r;
-      // 初始拋物線自洽分佈
       this.grid.Te[i] = Math.max((this.state.tempE0 - 0.1) * Math.pow(1 - r * r, 1.5) + 0.1, 0.1);
       this.grid.Ti[i] = Math.max((this.state.tempI0 - 0.1) * Math.pow(1 - r * r, 1.5) + 0.1, 0.1);
       this.grid.n[i] = Math.max((this.state.density0 - 0.15) * Math.pow(1 - r * r, 1.0) + 0.15, 0.15);
-      // 單調遞增 q 剖面 (q0 ~ 1.05, q95 ~ 3.5)
-      this.grid.qProfile[i] = 1.05 + 2.5 * Math.pow(r, 2);
+      this.grid.qProfile[i] = 1.05 + (this.state.q95 - 1.05) * Math.pow(r, 2);
     }
   },
 
-  // 1D 徑向有限差分輸運方程求解器 (∂T/∂t = 1/r ∂/∂r (r χ ∂T/∂r) + Sources - Losses)
-  solve1DTransport(dt) {
+  // Crank-Nicolson 半隱式 1D 徑向輸運步進求解
+  solve1DTransportCN(dt) {
     const g = this.grid;
     const s = this.state;
     const geo = TOKAMAK_GEO;
     const N = RADIAL_GRIDS;
     const dr = 1.0 / (N - 1);
 
-    // 1. 判斷 H-Mode 門檻與邊緣輸運壘 (ETB)
+    // 1. H-Mode 躍遷與邊緣輸運壘 (ETB) 判定
     const pTotalHeat = s.heatECRH + s.heatNBI + s.pFusion * 0.2;
     const pThresholdH = 0.0488 * Math.pow(s.density0, 0.717) * Math.pow(s.magField, 0.8) * Math.pow(geo.R0, 1.0);
     s.isHMode = pTotalHeat > pThresholdH;
 
-    // 基礎輸運係數 chi (m^2/s)
-    const chi_core = s.isHMode ? 0.45 : 0.95;
-    const chi_edge = s.isHMode ? 0.08 : 1.60; // H-Mode 邊緣形成極低擴散的 ETB 輸送壘
+    // ETB 崩塌後的指數重建動態 (τ_ped ≈ 25ms)
+    if (s.pedestalRecoveryFactor < 1.0) {
+      s.pedestalRecoveryFactor = Math.min(1.0, s.pedestalRecoveryFactor + dt / 0.025);
+    }
+
+    const chi_core = s.isHMode ? 0.42 : 0.92;
+    const chi_edge_nominal = s.isHMode ? 0.06 : 1.55;
+    const chi_edge = chi_edge_nominal / Math.max(s.pedestalRecoveryFactor, 0.2);
 
     let totalFusionPower_W = 0;
     let volIntegralTe = 0, volIntegralTi = 0, volIntegralN = 0;
     const E_fus_J = 17.6 * 1.60218e-13;
 
-    // 臨時緩衝導數數組
-    const dTe = new Float32Array(N);
-    const dTi = new Float32Array(N);
-    const dn = new Float32Array(N);
+    // 構建三對角矩陣 (A: 下對角, B: 主對角, C: 上對角, D: 右側源項向量)
+    const A_e = new Float32Array(N), B_e = new Float32Array(N), C_e = new Float32Array(N), D_e = new Float32Array(N);
+    const A_i = new Float32Array(N), B_i = new Float32Array(N), C_i = new Float32Array(N), D_i = new Float32Array(N);
 
-    // 2. 遍歷網格節點計算徑向流 (Flux) 與源項
     for (let i = 0; i < N; i++) {
       const r = g.rho[i];
       const Te = g.Te[i];
       const Ti = g.Ti[i];
       const n_20 = g.n[i];
       const n_SI = n_20 * 1e20;
-
-      // 局部輸運擴散率 χ(r)
       const chi = (r > 0.8) ? chi_edge : chi_core;
 
-      // (A) 聚變反應源項 (Bosch-Hale)
+      // 聚變源項 (Bosch-Hale)
       const sigV = getBoschHaleSigmaV(Ti);
       const dVol = 4.0 * Math.PI * Math.PI * geo.R0 * Math.pow(geo.a, 2) * geo.kappa * (r === 0 ? 0.25 * dr : r) * dr;
-      const pFus_density = 0.25 * Math.pow(n_SI, 2) * sigV * E_fus_J; // W/m^3
-      const pAlpha_local_MW_m3 = (pFus_density * 0.2) / 1e6;
+      const pFus_density = 0.25 * Math.pow(n_SI, 2) * sigV * E_fus_J;
+      const pAlpha_local = (pFus_density * 0.2) / 1e6;
       totalFusionPower_W += pFus_density * dVol;
 
-      // (B) 輔助加熱沉積剖面 (高斯分佈)
-      const pECRH_local = (s.heatECRH / geo.volume) * 2.8 * Math.exp(-Math.pow(r / 0.25, 2)); // ECRH 沉積於核心
-      const pNBI_local = (s.heatNBI / geo.volume) * 2.1 * Math.exp(-Math.pow(r / 0.55, 2));  // NBI 沉積於離子
+      // 輔助加熱沉積
+      const pECRH_local = (s.heatECRH / geo.volume) * 2.8 * Math.exp(-Math.pow(r / 0.25, 2));
+      const pNBI_local = (s.heatNBI / geo.volume) * 2.1 * Math.exp(-Math.pow(r / 0.55, 2));
 
-      // (C) 輻射損失：軔致輻射 + 雜質線輻射 (Z_eff) + 同步輻射
-      const pBrem_local = 5.35e-3 * geo.Z_eff * Math.pow(n_20, 2) * Math.sqrt(Math.max(Te, 0.05));
-      const pImpurity_local = 1.2e-2 * (geo.impurityFrac * geo.Z_eff) * Math.pow(n_20, 2) / (Math.sqrt(Te) + 0.1);
-      const pSync_local = 6.2e-4 * Math.sqrt(n_20) * Math.pow(s.magField, 2.5) * Math.pow(Te, 2);
-      const pRad_total = pBrem_local + pImpurity_local + (r < 0.4 ? pSync_local : 0);
+      // 輻射項 (軔致輻射 + 雜質輻射 + 同步輻射)
+      const pBrem = 5.35e-3 * geo.Z_eff * Math.pow(n_20, 2) * Math.sqrt(Math.max(Te, 0.05));
+      const pImpurity = 1.2e-2 * (geo.impurityFrac * geo.Z_eff) * Math.pow(n_20, 2) / (Math.sqrt(Te) + 0.1);
+      const pSync = 6.2e-4 * Math.sqrt(n_20) * Math.pow(s.magField, 2.5) * Math.pow(Te, 2);
+      const pRad = pBrem + pImpurity + (r < 0.4 ? pSync : 0);
 
-      // (D) 庫侖碰撞能量交換 (Equipartition)
+      // 庫侖能量交換
       const tau_ei = Math.max(0.12 * Math.pow(Te, 1.5) / Math.max(n_20, 0.1), 0.005);
-      const q_ei = 1.5 * n_SI * 1.60218e-16 * ((Te - Ti) / tau_ei) / 1e6; // MW/m^3
+      const q_ei = 1.5 * n_SI * 1.60218e-16 * ((Te - Ti) / tau_ei) / 1e6;
 
-      // (E) 徑向熱傳導擴散 (1/r ∂/∂r (r χ ∂T/∂r))
-      let diffTe = 0, diffTi = 0, diffN = 0;
-      if (i > 0 && i < N - 1) {
+      const heatCap = Math.max(1.5 * n_SI * 1.60218e-16 / 1e6, 0.01);
+      const alpha = (0.5 * dt * chi) / (dr * dr); // Crank-Nicolson 權重因子
+
+      if (i === 0) {
+        // 磁軸對稱邊界條件 ∂T/∂r = 0 (Ghost cell Te[-1] = Te[1])
+        B_e[0] = 1.0 + 2.0 * alpha;
+        C_e[0] = -2.0 * alpha;
+        D_e[0] = Te + (dt / heatCap) * (pECRH_local + 0.5 * pAlpha_local - pRad - q_ei);
+
+        B_i[0] = 1.0 + 2.0 * alpha;
+        C_i[0] = -2.0 * alpha;
+        D_i[0] = Ti + (dt / heatCap) * (pNBI_local + 0.5 * pAlpha_local + q_ei);
+      } else if (i === N - 1) {
+        // 邊緣固定低溫邊界 (SOL Dirichlet Boundary)
+        B_e[N - 1] = 1.0;
+        D_e[N - 1] = 0.08;
+        B_i[N - 1] = 1.0;
+        D_i[N - 1] = 0.08;
+      } else {
         const r_plus = r + 0.5 * dr;
         const r_minus = r - 0.5 * dr;
-        const gradTe_plus = (g.Te[i + 1] - g.Te[i]) / dr;
-        const gradTe_minus = (g.Te[i] - g.Te[i - 1]) / dr;
-        diffTe = (chi / Math.max(r, 0.01)) * ((r_plus * gradTe_plus - r_minus * gradTe_minus) / dr);
+        const geom_p = (alpha * r_plus) / r;
+        const geom_m = (alpha * r_minus) / r;
 
-        const gradTi_plus = (g.Ti[i + 1] - g.Ti[i]) / dr;
-        const gradTi_minus = (g.Ti[i] - g.Ti[i - 1]) / dr;
-        diffTi = (chi / Math.max(r, 0.01)) * ((r_plus * gradTi_plus - r_minus * gradTi_minus) / dr);
+        A_e[i] = -geom_m;
+        B_e[i] = 1.0 + geom_p + geom_m;
+        C_e[i] = -geom_p;
+        D_e[i] = Te + (dt / heatCap) * (pECRH_local + 0.5 * pAlpha_local - pRad - q_ei);
 
-        const gradN_plus = (g.n[i + 1] - g.n[i]) / dr;
-        const gradN_minus = (g.n[i] - g.n[i - 1]) / dr;
-        diffN = (0.35 * chi / Math.max(r, 0.01)) * ((r_plus * gradN_plus - r_minus * gradN_minus) / dr);
+        A_i[i] = -geom_m;
+        B_i[i] = 1.0 + geom_p + geom_m;
+        C_i[i] = -geom_p;
+        D_i[i] = Ti + (dt / heatCap) * (pNBI_local + 0.5 * pAlpha_local + q_ei);
       }
 
-      // (F) 熱容與節點導數合成 (3/2 n ∂T/∂t)
-      const heatCap = Math.max(1.5 * n_SI * 1.60218e-16 / 1e6, 0.01);
-      dTe[i] = diffTe + (pECRH_local + 0.5 * pAlpha_local_MW_m3 - pRad_total - q_ei) / heatCap;
-      dTi[i] = diffTi + (pNBI_local + 0.5 * pAlpha_local_MW_m3 + q_ei) / heatCap;
-      dn[i] = diffN - 0.02 * n_20; // 邊界粒子抽吸損失
-
-      // 體積加權統計
       const weight = 2.0 * r * dr;
       volIntegralTe += Te * weight;
       volIntegralTi += Ti * weight;
       volIntegralN += n_20 * weight;
     }
 
-    // 3. 邊界條件與有限步進更新
+    // 2. 半隱式求解溫度剖面
+    const nextTe = solveTridiagonal(A_e, B_e, C_e, D_e, N);
+    const nextTi = solveTridiagonal(A_i, B_i, C_i, D_i, N);
+
     for (let i = 0; i < N; i++) {
-      if (i === 0) {
-        // 磁軸對稱邊界條件 ∂T/∂r = 0
-        g.Te[0] = g.Te[1];
-        g.Ti[0] = g.Ti[1];
-        g.n[0] = g.n[1];
-      } else if (i === N - 1) {
-        // 刮削層 (SOL) 邊緣固定低溫邊界
-        g.Te[N - 1] = 0.08;
-        g.Ti[N - 1] = 0.08;
-        g.n[N - 1] = 0.12;
-      } else {
-        g.Te[i] = Math.max(g.Te[i] + dTe[i] * dt, 0.08);
-        g.Ti[i] = Math.max(g.Ti[i] + dTi[i] * dt, 0.08);
-        g.n[i] = Math.max(g.n[i] + dn[i] * dt, 0.12);
-      }
+      g.Te[i] = Math.max(nextTe[i], 0.08);
+      g.Ti[i] = Math.max(nextTi[i], 0.08);
+      g.n[i] = Math.max(g.n[i] - 0.018 * g.n[i] * dt, 0.12);
     }
 
-    // 4. 更新標量狀態與安全因子剖面 q(r)
+    // 3. 狀態標量映射
     s.tempE0 = g.Te[0];
     s.tempI0 = g.Ti[0];
     s.density0 = g.n[0];
@@ -207,14 +232,29 @@ const FusionPhysics = {
     const pTotalIn = s.heatECRH + s.heatNBI;
     s.qGain = pTotalIn > 0 ? (s.pFusion / pTotalIn) : 0;
 
-    // 更新 q(r) 剖面 (依據等離子體電流 Ip 與電導率)
+    // 4. 安全因子 q(r) 演化與磁島自洽平坦化耦合
     const shapeFactor = (1 + Math.pow(geo.kappa, 2)) / 2.0;
     s.q95 = (5.0 * Math.pow(geo.a, 2) * s.magField / (geo.R0 * s.plasmaCurrent)) * shapeFactor;
+    
+    // 共振面定位 (q = 2.0 所在半徑)
+    const r_res = Math.min(Math.max(Math.sqrt(Math.max(2.0 - 1.05, 0) / Math.max(s.q95 - 1.05, 0.1)), 0.1), 0.9);
+
     for (let i = 0; i < N; i++) {
-      g.qProfile[i] = 1.05 + (s.q95 - 1.05) * Math.pow(g.rho[i], 2);
+      const r = g.rho[i];
+      let baseQ = 1.05 + (s.q95 - 1.05) * Math.pow(r, 2);
+      
+      // 磁島平坦化效應 (Island-Induced Profile Flattening)
+      if (s.magneticIslandWidth > 0.05) {
+        const distToRes = Math.abs(r - r_res);
+        if (distToRes < s.magneticIslandWidth * 0.5) {
+          baseQ = 2.0; // 磁島內部 q 剖面鎖定在 2.0
+          g.Te[i] *= (1.0 - 0.25 * (s.magneticIslandWidth - distToRes)); // 磁島熱短路冷卻
+        }
+      }
+      g.qProfile[i] = baseQ;
     }
 
-    // Greenwald 密度極限比
+    // Greenwald 密度極限
     const n_G = s.plasmaCurrent / (Math.PI * Math.pow(geo.a, 2));
     s.greenwaldRatio = volIntegralN / n_G;
 
@@ -227,57 +267,57 @@ const FusionPhysics = {
     const beta_p = beta_t_percent * Math.pow(s.q95, 2);
     s.shafranovShift = (Math.pow(geo.a, 2) / (2 * geo.R0)) * Math.min(beta_p * 0.1 + 0.5, 2.5);
 
-    // 5. 自洽 ETB 邊緣局域模 (Type-I ELM) 週期性崩塌
+    // 5. 自洽 ETB 重建與 Type-I ELM 鋸齒崩塌
     s.pedestalPressure = g.n[N - 3] * (g.Te[N - 3] + g.Ti[N - 3]);
     s.elmBurst = false;
-    if (s.isHMode) {
-      s.elmTimer += dt;
-      // 當邊緣壓力梯度超過臨界 Peeling-Ballooning 閾值時觸發自洽弛豫
-      if (s.pedestalPressure > 4.2 && s.elmTimer > 0.35) {
+    if (s.isHMode && s.pedestalRecoveryFactor >= 0.95) {
+      if (s.pedestalPressure > 4.4) {
         s.elmBurst = true;
-        s.elmTimer = 0;
-        // 邊緣輸運壘崩塌：快速釋放邊緣粒子與能量
+        s.pedestalRecoveryFactor = 0.25; // 崩塌邊緣輸送壘
         for (let i = N - 6; i < N; i++) {
           g.Te[i] *= 0.65;
           g.Ti[i] *= 0.65;
           g.n[i] *= 0.70;
         }
       }
-    } else {
-      s.elmTimer = 0;
     }
 
-    // 6. Rutherford 磁島寬度演化方程 (MHD 撕裂模)
-    // dw/dt = η/μ0 [ Δ' + r_s * β_p / w ]
-    const qResonanceMismatch = Math.abs(g.qProfile[Math.floor(N * 0.7)] - 2.0);
-    const deltaPrime = (s.q95 < 2.0 || s.betaN > 2.8) ? (2.8 - s.q95) * 4.0 : -2.0;
-    const dw_dt = 0.15 * (deltaPrime + (s.betaN * 0.8) / Math.max(s.magneticIslandWidth, 0.05));
+    // 6. Rutherford 磁島寬度演化方程
+    const deltaPrime = (s.q95 < 2.0 || s.betaN > 2.8) ? (2.8 - s.q95) * 4.5 : -2.2;
+    const dw_dt = 0.18 * (deltaPrime + (s.betaN * 0.85) / Math.max(s.magneticIslandWidth, 0.05));
     s.magneticIslandWidth = Math.max(0, Math.min(s.magneticIslandWidth + dw_dt * dt, 1.2));
     s.kinkDistortion = s.magneticIslandWidth;
 
     if (s.magneticIslandWidth > 0.65 && s.failingCoilIndex === -1) {
       s.failingCoilIndex = Math.floor(Math.random() * COILS_COUNT);
     }
+
+    // 7. 垂直位移不穩定性 (Vertical Displacement Event, VDE)
+    // 伸長率越高、beta_p 越大，垂直增長率越強
+    const decayIndex = (geo.kappa - 1.0) * 1.8;
+    s.vdeGrowthRate = (s.betaN > 2.5 || s.kinkDistortion > 0.4) ? decayIndex * 4.5 : -3.0;
+    
+    if (s.vdeGrowthRate > 0) {
+      s.deltaZ = Math.min(s.deltaZ + 0.02 * Math.exp(s.vdeGrowthRate * dt), 1.2);
+    } else {
+      s.deltaZ = Math.max(0, s.deltaZ - 1.5 * dt); // 反饋控制迴路回中
+    }
   },
 
   update(dt) {
     if (this.state.gameOver) return;
 
-    // 子循環保證數值擴散穩定性 (CFL 條件)
-    const subSteps = 4;
-    const subDt = dt / subSteps;
-    for (let step = 0; step < subSteps; step++) {
-      this.solve1DTransport(subDt);
-    }
-
+    // 數值半隱式求解 1D 輸運
+    this.solve1DTransportCN(dt);
     const s = this.state;
 
     // 第一壁累積熱疲勞與破裂判定
     let activeDamage = 0;
     if (s.kinkDistortion > 0.3) activeDamage += s.kinkDistortion * 22.0;
     if (s.elmBurst) activeDamage += 9.5;
+    if (s.deltaZ > 0.35) activeDamage += s.deltaZ * 45.0; // VDE 垂直撞擊第一壁頂底
     if (s.tempE0 > 24.0 || s.tempI0 > 24.0) activeDamage += (Math.max(s.tempE0, s.tempI0) - 24.0) * 4.0;
-    if (s.greenwaldRatio > 1.0) activeDamage += (s.greenwaldRatio - 1.0) * 35.0; // 輻射坍縮劇烈熱衝擊
+    if (s.greenwaldRatio > 1.0) activeDamage += (s.greenwaldRatio - 1.0) * 35.0;
 
     if (activeDamage > 0) {
       const deltaDmg = activeDamage * dt;
@@ -292,22 +332,18 @@ const FusionPhysics = {
     }
   },
 
-  // 燃料顆粒注入 (Pellet Injection)：帶有高斯沉積剖面與自洽蒸發吸熱冷卻效應
   injectPellet() {
     const g = this.grid;
     const N = RADIAL_GRIDS;
-    // 燃料沉積中心 rho ~ 0.4 (穿透深度)
     for (let i = 0; i < N; i++) {
       const r = g.rho[i];
       const deposition = 0.55 * Math.exp(-Math.pow((r - 0.4) / 0.18, 2));
       g.n[i] = Math.min(g.n[i] + deposition, 3.8);
-      // 顆粒電離蒸發自洽消耗熱能 (局部溫度驟降冷卻)
       g.Te[i] = Math.max(g.Te[i] * (1.0 - deposition * 0.28), 0.15);
       g.Ti[i] = Math.max(g.Ti[i] * (1.0 - deposition * 0.25), 0.15);
     }
   },
 
-  // 偏濾器排熱
   purgeDivertor() {
     const g = this.grid;
     for (let i = 0; i < RADIAL_GRIDS; i++) {
@@ -316,21 +352,18 @@ const FusionPhysics = {
     }
   },
 
-  // 線圈修復與磁島抑制
   repairCoil(index) {
     if (this.state.failingCoilIndex === index) {
       this.state.failingCoilIndex = -1;
-      this.state.magneticIslandWidth *= 0.2; // 修復線圈後迅速壓制磁島
+      this.state.magneticIslandWidth *= 0.2;
     }
   },
 
-  // 接收自訂 3D 打印 STL 幾何參數
   applyCoreGeometryModifiers(triangleCount, aspectRatio, maxDim) {
     const complexityFactor = Math.min(Math.max(triangleCount / 5000, 0.5), 2.5);
-    TOKAMAK_GEO.impurityFrac = 0.025 * Math.sqrt(complexityFactor); // 複雜結構增加壁面雜質脫附
+    TOKAMAK_GEO.impurityFrac = 0.025 * Math.sqrt(complexityFactor);
     if (window.AudioSys) AudioSys.playTone(520, 'triangle', 0.25, 0.08);
   }
 };
 
-// 模組初始化剖面
 FusionPhysics.initProfiles();
