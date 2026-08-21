@@ -1,5 +1,5 @@
 // =========================================================================
-// J.A.R. 聚變核心 3D - 100% 全雙語介面與證書系統 (ui.js v11.5)
+// J.A.R. 聚變核心 3D - 100% 全雙語介面與證書系統 (ui.js v14.0 Release)
 // =========================================================================
 
 const I18N = {
@@ -9,11 +9,11 @@ const I18N = {
     zh: {
       toggleBtn: 'English',
       btnCert: '📜 授權證書',
-      wallIntegrity: '第一壁材料狀態 (First Wall Integrity)',
+      wallIntegrity: '第一壁材料狀態',
       poloidalFlux: '極向磁通量表面 Ψ(R,Z)',
       dualTemp: '雙溫分離 (Te / Ti)',
       safetyFactor: '安全因子 q₉₅ / 歸一化 β_N',
-      energyGain: '聚變能量增益 Q (P_fus/P_in)',
+      energyGain: '聚變能量增益 Q',
       solHeatLabel: 'SOL 靶板熱流 / 密度極限',
       ecrhPower: '微波加熱 P_ECRH',
       nbiPower: '中性束注入 P_NBI',
@@ -28,15 +28,15 @@ const I18N = {
       divertorPurge: '開啟偏濾器排熱',
       loadStl: '📁 載入 3D 打印 STL 核心',
       repairing: '正在修復線圈',
-      incidentTitle: '事故黑盒子歸因診斷 (Incident Report)',
+      incidentTitle: '事故黑盒子歸因診斷',
       primaryCause: '主因判定',
       tacticalAdvice: '國家能源研究院專家建議',
       restartCore: '重啟反應爐 (回到安全待機)',
       powerStandby: '🟢 系統主電源：待機中',
       powerRunning: '🔴 系統主電源：運行中',
-      modeEasy: '🟢 簡易科普模式 (必穩定)',
-      modeStandard: '🟡 工程標準模式 (6 參數)',
-      modeAdvanced: '🔴 博士科研模式 (9 參數)',
+      modeEasy: '🟢 簡易科普模式',
+      modeStandard: '🟡 工程標準模式',
+      modeAdvanced: '🔴 博士科研模式',
       hideHud: '精簡視圖',
       showHud: '完整儀表',
       missionActive: 'MISSION ACTIVE',
@@ -70,11 +70,11 @@ const I18N = {
     en: {
       toggleBtn: '中文',
       btnCert: '📜 License Card',
-      wallIntegrity: 'First Wall Material Integrity',
+      wallIntegrity: 'First Wall Integrity',
       poloidalFlux: 'Poloidal Flux Surfaces Ψ(R,Z)',
       dualTemp: 'Two-Fluid Temp (Te / Ti)',
       safetyFactor: 'Safety Factor q₉₅ / Norm β_N',
-      energyGain: 'Fusion Gain Q (P_fus/P_in)',
+      energyGain: 'Fusion Gain Q',
       solHeatLabel: 'SOL Heatflux / Density Limit',
       ecrhPower: 'ECRH Heating P_ECRH',
       nbiPower: 'NBI Heating P_NBI',
@@ -95,7 +95,7 @@ const I18N = {
       restartCore: 'RESTART REACTOR (STANDBY)',
       powerStandby: '🟢 CORE POWER: STANDBY',
       powerRunning: '🔴 CORE POWER: ONLINE',
-      modeEasy: '🟢 EASY (STABLE)',
+      modeEasy: '🟢 EASY MODE',
       modeStandard: '🟡 STANDARD (6 PARAMS)',
       modeAdvanced: '🔴 RESEARCH (9 PARAMS)',
       hideHud: 'HIDE HUD',
@@ -190,7 +190,7 @@ const UIViewModel = {
       isIgnition,
       divHeatText: `${st.peakDivertorHeatFlux_MW_m2.toFixed(1)} MW/m²`,
       divHeatColor: st.peakDivertorHeatFlux_MW_m2 > 10.0 ? '#ef4444' : '#cbd5e1',
-      integrityText: `${st.integrity.toFixed(1)}% [Max: ${st.maxIntegrity.toFixed(1)}%]`,
+      integrityText: `${st.integrity.toFixed(1)}%`,
       integrityWidth: `${st.integrity}%`,
       integrityMaxWidth: `${st.maxIntegrity}%`,
       scanlineSpeed,
