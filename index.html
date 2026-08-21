@@ -2,12 +2,24 @@
 <html lang="zh-HK">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>J.A.R. 聚變核心 3D (Joint Advanced Reactor Fusion Core 3D)</title>
+  
+  <!-- PWA 支援 -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#00f0ff">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  
   <link rel="stylesheet" href="style.css">
   
+  <!-- Three.js 核心與控制器 -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <!-- 3D 打印 STL 載入器 -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/STLLoader.js"></script>
+  
+  <!-- 3A UnrealBloom 後處理組件 -->
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/EffectComposer.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
@@ -17,7 +29,6 @@
 </head>
 <body>
 
-  <!-- 3D 畫布與背景層 -->
   <div id="canvas-container"></div>
   <div id="atmosphere-glow"></div>
   <div id="scanlines"></div>
@@ -32,7 +43,7 @@
   </div>
 
   <div id="ui-layer">
-    <!-- 頂部欄：材料狀態 + 生涯成就 + 語言按鈕 -->
+    <!-- 頂部欄 -->
     <div id="top-bar">
       <div id="top-header-row">
         <div id="integrity-container">
@@ -99,7 +110,7 @@
       </div>
     </div>
 
-    <!-- 底部控制面板 -->
+    <!-- 底部控制面板 (包含 STL 模型載入) -->
     <div id="controls-panel">
       <div class="control-group">
         <label><span data-i18n="ecrhPower">微波加熱 P_ECRH (→Te)</span>: <span id="label-heat-ecrh">10.0 MW</span></label>
@@ -120,11 +131,14 @@
       <div class="btn-row">
         <button class="btn-fuel" id="btn-fuel" data-i18n="injectFuel">注入 D-T 燃料顆粒</button>
         <button class="btn-divertor" id="btn-cool" data-i18n="divertorPurge">開啟偏濾器排熱</button>
+        <!-- STL 3D 模型載入按鈕 -->
+        <button class="btn-stl" id="btn-load-stl">📁 載入 3D 打印 STL 核心</button>
+        <input type="file" id="stl-file-input" accept=".stl" style="display:none;">
       </div>
     </div>
   </div>
 
-  <!-- 事故歸因分析報告 (Incident Report Modal) -->
+  <!-- 事故歸因報告 -->
   <div id="incident-modal" class="modal-overlay hidden">
     <div class="modal-card">
       <div class="modal-header">
@@ -151,7 +165,7 @@
     </div>
   </div>
 
-  <!-- 任務成功勝利結算 (Mission Clear Modal) -->
+  <!-- 任務勝利結算 -->
   <div id="victory-modal" class="modal-overlay hidden">
     <div class="modal-card victory-card">
       <div class="modal-header">
