@@ -22,7 +22,6 @@ controls.dampingFactor = 0.05;
 controls.maxDistance = 24;
 controls.minDistance = 4;
 
-// 後處理管線
 const renderScene = new THREE.RenderPass(scene, camera);
 const bloomPass = new THREE.UnrealBloomPass(
   new THREE.Vector2(window.innerWidth, window.innerHeight),
@@ -32,7 +31,6 @@ const composer = new THREE.EffectComposer(renderer);
 composer.addPass(renderScene);
 composer.addPass(bloomPass);
 
-// 燈光系統
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.35);
 scene.add(ambientLight);
 
@@ -47,7 +45,7 @@ const coreGroup = new THREE.Group();
 scene.add(coreGroup);
 
 // ========================================================
-// 2. 真空室結構與中心柱置換架構
+// 2. 真空室結構與 STL 熱流著色器 (Thermal Load Shader)
 // ========================================================
 const chamberGeo = new THREE.SphereGeometry(3.9, 48, 32);
 const chamberMat = new THREE.MeshPhysicalMaterial({
@@ -58,28 +56,69 @@ const chamberMat = new THREE.MeshPhysicalMaterial({
   metalness: 0.85,
   side: THREE.BackSide
 });
-const chamber = new THREE.Mesh(chamberGeo, chamberMat);
-coreGroup.add(chamber);
+coreGroup.add(new THREE.Mesh(chamberGeo, chamberMat));
 
 const ribMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, metalness: 0.85, roughness: 0.35 });
 for (let i = 0; i < 12; i++) {
-  const angle = (i * Math.PI) / 6;
-  const ribGeo = new THREE.TorusGeometry(3.7, 0.025, 8, 32);
-  const rib = new THREE.Mesh(ribGeo, ribMat);
-  rib.rotation.y = angle;
+  const rib = new THREE.Mesh(new THREE.TorusGeometry(3.7, 0.025, 8, 32), ribMat);
+  rib.rotation.y = (i * Math.PI) / 6;
   rib.rotation.x = Math.PI / 2;
   coreGroup.add(rib);
 }
 
-// 預設中心柱
+// STL 熱流密度著色器
+const stlThermalUniforms = {
+  uTemp: { value: 2.5 },
+  uHeatFlux: { value: 0.0 },
+  uTime: { value: 0.0 }
+};
+
+const stlThermalMaterial = new THREE.ShaderMaterial({
+  uniforms: stlThermalUniforms,
+  vertexShader: `
+    varying vec3 vNormal;
+    varying vec3 vPosition;
+    void main() {
+      vNormal = normalize(normalMatrix * normal);
+      vPosition = position;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: `
+    uniform float uTemp;
+    uniform float uHeatFlux;
+    uniform float uTime;
+    varying vec3 vNormal;
+    varying vec3 vPosition;
+
+    void main() {
+      float radialDist = length(vPosition.xz);
+      float heatExposure = smoothstep(0.0, 1.5, radialDist) * (uTemp / 30.0);
+      heatExposure += sin(vPosition.y * 8.0 + uTime * 3.0) * 0.08 * uHeatFlux;
+
+      vec3 coldColor = vec3(0.02, 0.4, 0.6);
+      vec3 warmColor = vec3(1.0, 0.35, 0.0);
+      vec3 incandescent = vec3(1.0, 0.95, 0.85);
+
+      vec3 finalColor = mix(coldColor, warmColor, clamp(heatExposure * 1.5, 0.0, 1.0));
+      finalColor = mix(finalColor, incandescent, clamp((heatExposure - 0.7) * 3.0, 0.0, 1.0));
+
+      float fresnel = pow(1.0 - abs(dot(vNormal, vec3(0.0, 0.0, 1.0))), 2.0);
+      gl_FragColor = vec4(finalColor + fresnel * 0.3, 1.0);
+    }
+  `
+});
+
 let currentCoreMesh = new THREE.Mesh(
   new THREE.CylinderGeometry(1.1, 1.1, 1.2, 32),
-  new THREE.MeshStandardMaterial({ color: 0x090d16, metalness: 0.9, roughness: 0.2 })
+  stlThermalMaterial
 );
 coreGroup.add(currentCoreMesh);
 
-// 偏濾器
-const divertorGeo = new THREE.TorusGeometry(2.9, 0.12, 16, 32);
+// 幾何複雜度視覺湍流權重 (0.5 ~ 2.5)
+let stlTurbulenceFactor = 1.0;
+
+// 偏濾器靶板
 const divertorMat = new THREE.MeshStandardMaterial({
   color: 0x1e293b,
   metalness: 0.9,
@@ -87,7 +126,7 @@ const divertorMat = new THREE.MeshStandardMaterial({
   emissive: new THREE.Color(0x000000),
   emissiveIntensity: 0
 });
-const divertor = new THREE.Mesh(divertorGeo, divertorMat);
+const divertor = new THREE.Mesh(new THREE.TorusGeometry(2.9, 0.12, 16, 32), divertorMat);
 divertor.position.y = -1.35;
 divertor.rotation.x = Math.PI / 2;
 coreGroup.add(divertor);
@@ -100,16 +139,16 @@ const coilMatFail = new THREE.MeshStandardMaterial({ color: 0xef4444, emissive: 
 
 for (let i = 0; i < COILS_COUNT; i++) {
   const angle = i * (Math.PI * 2 / COILS_COUNT);
-  const coilGeo = new THREE.TorusGeometry(3.2, 0.2, 16, 32);
-  const coil = new THREE.Mesh(coilGeo, coilMatNormal.clone());
+  const coil = new THREE.Mesh(new THREE.TorusGeometry(3.2, 0.2, 16, 32), coilMatNormal.clone());
   coil.rotation.y = angle;
   coil.userData = { index: i, angle };
   coreGroup.add(coil);
   coilMeshes.push(coil);
 
-  const ringGeo = new THREE.RingGeometry(3.38, 3.46, 32);
-  const ringMat = new THREE.MeshBasicMaterial({ color: 0x00f0ff, side: THREE.DoubleSide, transparent: true, opacity: 0.2 });
-  const ring = new THREE.Mesh(ringGeo, ringMat);
+  const ring = new THREE.Mesh(
+    new THREE.RingGeometry(3.38, 3.46, 32),
+    new THREE.MeshBasicMaterial({ color: 0x00f0ff, side: THREE.DoubleSide, transparent: true, opacity: 0.2 })
+  );
   ring.rotation.y = angle;
   ring.rotation.x = Math.PI / 2;
   coreGroup.add(ring);
@@ -117,10 +156,12 @@ for (let i = 0; i < COILS_COUNT; i++) {
 }
 
 // ========================================================
-// 3. 3D 打印 STL 載入器 (自動縮放與法線對齊)
+// 3. 3D 打印 STL 載入與幾何湍流提取
 // ========================================================
 const btnLoadStl = document.getElementById('btn-load-stl');
 const stlFileInput = document.getElementById('stl-file-input');
+let isFramingCamera = false;
+let cameraTargetPos = new THREE.Vector3();
 
 if (btnLoadStl && stlFileInput) {
   btnLoadStl.onclick = () => stlFileInput.click();
@@ -135,38 +176,38 @@ if (btnLoadStl && stlFileInput) {
         const loader = new THREE.STLLoader();
         const geometry = loader.parse(ev.target.result);
 
-        // 計算模型邊界盒與自動歸一化居中
         geometry.computeBoundingBox();
         geometry.computeVertexNormals();
+
         const box = geometry.boundingBox;
         const size = new THREE.Vector3();
         box.getSize(size);
         const maxDim = Math.max(size.x, size.y, size.z);
-
-        // 縮放為托卡馬克真空室適配尺寸 (高度 ~ 1.8m)
         const targetScale = 1.8 / maxDim;
 
-        const stlMaterial = new THREE.MeshStandardMaterial({
-          color: 0x38bdf8,
-          metalness: 0.85,
-          roughness: 0.25,
-          emissive: 0x00f0ff,
-          emissiveIntensity: 0.15
-        });
+        // 計算幾何特徵並同步至物理與視覺湍流
+        const triangleCount = geometry.attributes.position.count / 3;
+        const aspectRatio = size.y / Math.max((size.x + size.z) / 2, 0.01);
+        stlTurbulenceFactor = Math.min(Math.max(triangleCount / 4000, 0.6), 2.4);
 
-        const newStlMesh = new THREE.Mesh(geometry, stlMaterial);
+        FusionPhysics.applyCoreGeometryModifiers(triangleCount, aspectRatio, maxDim);
+
+        const newStlMesh = new THREE.Mesh(geometry, stlThermalMaterial);
         newStlMesh.scale.setScalar(targetScale);
-
-        // 幾何居中
         geometry.center();
 
-        // 置換舊核心柱
         coreGroup.remove(currentCoreMesh);
         currentCoreMesh = newStlMesh;
         coreGroup.add(currentCoreMesh);
 
-        // 播放載入成功音效
-        AudioSys.playTone(880, 'sine', 0.3, 0.1);
+        // 相機自適應構圖
+        const fovInRad = (camera.fov * Math.PI) / 180;
+        const fitDistance = (maxDim * targetScale) / (2 * Math.tan(fovInRad / 2)) * 2.2;
+        cameraTargetPos.set(0, fitDistance * 0.6, fitDistance);
+        controls.minDistance = fitDistance * 0.4;
+        controls.maxDistance = fitDistance * 3.0;
+        isFramingCamera = true;
+
         if (navigator.vibrate) navigator.vibrate([40, 30, 60]);
       } catch (err) {
         console.error('STL Parsing Failed:', err);
@@ -211,6 +252,7 @@ for (let i = 0; i < PARTICLE_COUNT; i++) {
     phi,
     rho,
     isElectron,
+    turbulenceSeed: Math.random() * 100.0,
     speedTheta: (isElectron ? 0.045 : 0.02) + Math.random() * 0.02,
     speedPhi: (isElectron ? 0.09 : 0.04) + Math.random() * 0.03
   });
@@ -229,26 +271,16 @@ for (let i = 0; i < PARTICLE_COUNT; i++) {
 particleGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
 particleGeo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 
-const particleMat = new THREE.PointsMaterial({
-  size: 0.14,
-  vertexColors: true,
-  transparent: true,
-  opacity: 0.88,
-  blending: THREE.AdditiveBlending
-});
-const plasmaParticles = new THREE.Points(particleGeo, particleMat);
+const plasmaParticles = new THREE.Points(
+  particleGeo,
+  new THREE.PointsMaterial({ size: 0.14, vertexColors: true, transparent: true, opacity: 0.88, blending: THREE.AdditiveBlending })
+);
 coreGroup.add(plasmaParticles);
 
-// 焊接火花
+// 焊接火花與閃光環
 const activeSparks = [];
 const sparkGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, 0)]);
-const sparkMat = new THREE.PointsMaterial({
-  color: 0xffea00,
-  size: 0.18,
-  transparent: true,
-  opacity: 1.0,
-  blending: THREE.AdditiveBlending
-});
+const sparkMat = new THREE.PointsMaterial({ color: 0xffea00, size: 0.18, transparent: true, opacity: 1.0, blending: THREE.AdditiveBlending });
 
 function spawnWeldSpark(originPos) {
   for (let i = 0; i < 3; i++) {
@@ -258,7 +290,7 @@ function spawnWeldSpark(originPos) {
     activeSparks.push({
       mesh: p,
       vx: (Math.random() - 0.5) * 4.0,
-      vy: (Math.random() * 2.0 + 1.0),
+      vy: Math.random() * 2.0 + 1.0,
       vz: (Math.random() - 0.5) * 4.0,
       life: 0.25 + Math.random() * 0.2
     });
@@ -268,9 +300,10 @@ function spawnWeldSpark(originPos) {
 let flashRing = null;
 function triggerRepairFlash(pos) {
   if (flashRing) scene.remove(flashRing);
-  const flashGeo = new THREE.RingGeometry(0.1, 0.2, 32);
-  const flashMat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide, transparent: true, opacity: 1.0 });
-  flashRing = new THREE.Mesh(flashGeo, flashMat);
+  flashRing = new THREE.Mesh(
+    new THREE.RingGeometry(0.1, 0.2, 32),
+    new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide, transparent: true, opacity: 1.0 })
+  );
   flashRing.position.copy(pos);
   flashRing.lookAt(camera.position);
   scene.add(flashRing);
@@ -278,9 +311,7 @@ function triggerRepairFlash(pos) {
   cameraOffset.y -= 0.2;
 }
 
-// ========================================================
-// 5. 射線檢測與長按維修
-// ========================================================
+// 射線檢測與長按維修
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
 const CIRCLE_CIRCUMFERENCE = 226;
@@ -334,31 +365,53 @@ window.addEventListener('pointermove', (e) => {
   }
 });
 
-// 初始化系統
 UI.init();
 GameController.init(camera);
 
 // ========================================================
-// 6. 渲染主循環 (60 FPS 物理 + 後處理管線)
+// 5. 渲染主循環
 // ========================================================
 let cameraOffset = new THREE.Vector3(0, 0, 0);
 let targetFov = 45;
 let rollAngle = 0;
 let lastTime = performance.now();
 
+// 5 秒黑盒子數據環形緩衝區
+const TELEMETRY_HISTORY_LEN = 150;
+const telemetryHistory = [];
+
 function animate(now) {
   requestAnimationFrame(animate);
   const dt = Math.min((now - lastTime) / 1000, 0.1);
   lastTime = now;
 
-  // 1. 物理引擎更新
+  // 1. 物理步進
   FusionPhysics.update(dt);
   const st = FusionPhysics.state;
 
-  // 2. 遊戲控制器與任務更新
-  GameController.update(st, now, dt, coilMeshes);
+  // 2. 記錄時序黑盒子
+  if (!st.gameOver) {
+    telemetryHistory.push({
+      time: now * 0.001,
+      betaN: st.betaN,
+      q95: st.q95,
+      tempE: st.tempE0,
+      qGain: st.qGain
+    });
+    if (telemetryHistory.length > TELEMETRY_HISTORY_LEN) {
+      telemetryHistory.shift();
+    }
+  }
 
-  // 3. 長按維修與火花
+  // 3. 遊戲控制器更新
+  GameController.update(st, now, dt, coilMeshes, telemetryHistory);
+
+  // 4. 更新 STL 熱流著色器 Uniforms
+  stlThermalUniforms.uTemp.value = st.tempE0;
+  stlThermalUniforms.uHeatFlux.value = st.kinkDistortion + (st.elmBurst ? 1.5 : 0.0);
+  stlThermalUniforms.uTime.value = now * 0.001;
+
+  // 5. 長按維修
   if (isHolding && holdTargetIndex === st.failingCoilIndex) {
     holdProgress += dt / HOLD_DURATION;
     const offset = CIRCLE_CIRCUMFERENCE * (1 - Math.min(holdProgress, 1));
@@ -373,7 +426,7 @@ function animate(now) {
     }
   }
 
-  // 4. 火花粒子物理
+  // 6. 火花更新
   for (let i = activeSparks.length - 1; i >= 0; i--) {
     const sp = activeSparks[i];
     sp.mesh.position.x += sp.vx * dt;
@@ -388,7 +441,7 @@ function animate(now) {
     }
   }
 
-  // 5. 閃光光環
+  // 7. 閃光環
   if (flashRing) {
     flashRing.userData.scale += dt * 15.0;
     flashRing.userData.opacity -= dt * 4.0;
@@ -400,9 +453,10 @@ function animate(now) {
     }
   }
 
-  // 6. 等離子體粒子流
+  // 8. 粒子流動更新 (修復作用域問題 + 實裝 STL 幾何湍流微擾動)
   const posArr = plasmaParticles.geometry.attributes.position.array;
   const tempSpeedFactor = 1 + st.tempI0 * 0.05;
+  const tSec = now * 0.001;
 
   for (let i = 0; i < PARTICLE_COUNT; i++) {
     const p = particleData[i];
@@ -410,19 +464,23 @@ function animate(now) {
     p.theta += p.speedTheta * localSpeed;
     p.phi += p.speedPhi * localSpeed;
 
+    // 依據 STL 粗糙度注入高頻微渦流擾動 (Turbulence Fluctuation)
+    const geoTurbulence = Math.sin(p.theta * 7.0 + p.turbulenceSeed + tSec * 4.0) * (0.035 * (stlTurbulenceFactor - 0.5));
+    
     let elmKick = 0;
     if (st.elmBurst && p.rho > 0.7) elmKick = 0.2 * (Math.random() - 0.5);
 
     const wobble = Math.sin(p.theta * 3 + now * 0.005) * (st.kinkDistortion * 0.4);
-    const r = MINOR_R * p.rho + wobble + elmKick;
+    const r = MINOR_R * p.rho + wobble + elmKick + geoTurbulence;
 
-    posArr[i * 3] = (MAJOR_R + r * Math.cos(p.phi)) * Math.cos(p.theta);
-    posArr[i * 3 + 1] = r * Math.sin(p.phi) * 1.5 + Math.cos(p.theta * 2) * st.kinkDistortion * 0.2;
-    posArr[i * 3 + 2] = (MAJOR_R + r * Math.cos(p.phi)) * Math.sin(p.theta);
+    const currentTheta = p.theta; // 顯式宣告作用域變數
+    posArr[i * 3] = (MAJOR_R + r * Math.cos(p.phi)) * Math.cos(currentTheta);
+    posArr[i * 3 + 1] = r * Math.sin(p.phi) * 1.5 + Math.cos(currentTheta * 2) * st.kinkDistortion * 0.2 + (geoTurbulence * 0.8);
+    posArr[i * 3 + 2] = (MAJOR_R + r * Math.cos(p.phi)) * Math.sin(currentTheta);
   }
   plasmaParticles.geometry.attributes.position.needsUpdate = true;
 
-  // 7. 光暈殼與泛光
+  // 9. 光暈與偏濾器
   plasmaHalo.scale.set(1 + st.kinkDistortion * 0.08, 1, 1 + st.kinkDistortion * 0.08);
   if (st.qGain >= 1.0) {
     plasmaHalo.material.color.setHex(0x4ade80);
@@ -438,13 +496,12 @@ function animate(now) {
     bloomPass.strength = 1.1;
   }
 
-  // 8. 偏濾器發光
   const heatRatio = Math.min(st.tempE0 / 30.0, 1.0);
   divertorMat.emissive.setRGB(heatRatio * 0.9, heatRatio * 0.2, 0.0);
   divertorMat.emissiveIntensity = heatRatio * 0.8;
   divertorLight.intensity = heatRatio * 2.5;
 
-  // 9. 線圈警示
+  // 10. 線圈警示
   coilMeshes.forEach((mesh, idx) => {
     if (idx === st.failingCoilIndex) {
       mesh.material = coilMatFail;
@@ -457,10 +514,13 @@ function animate(now) {
     }
   });
 
-  // 10. UI 數據更新
   UI.updateHUD(st, now);
 
-  // 11. 相機編舞
+  if (isFramingCamera) {
+    camera.position.lerp(cameraTargetPos, dt * 3.0);
+    if (camera.position.distanceTo(cameraTargetPos) < 0.05) isFramingCamera = false;
+  }
+
   if (st.qGain >= 1.0) targetFov = 50;
   else if (st.gameOver) {
     targetFov = 40;
@@ -484,7 +544,6 @@ function animate(now) {
   camera.position.sub(cameraOffset);
 }
 
-// 視窗縮放
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
@@ -492,12 +551,18 @@ window.addEventListener('resize', () => {
   composer.setSize(window.innerWidth, window.innerHeight);
 });
 
-// PWA Service Worker 註冊
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js').catch((err) => {
-      console.log('SW Registration failed:', err);
-    });
+    navigator.serviceWorker.register('./sw.js').then((reg) => {
+      reg.addEventListener('updatefound', () => {
+        const newWorker = reg.installing;
+        newWorker.addEventListener('statechange', () => {
+          if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+            newWorker.postMessage('SKIP_WAITING');
+          }
+        });
+      });
+    }).catch((err) => console.log('SW failed:', err));
   });
 }
 
