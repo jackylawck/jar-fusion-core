@@ -1,13 +1,12 @@
 // =========================================================================
-// J.A.R. 聚變核心 3D - 遊戲控制器與情感導演系統 (GameController v3.2)
+// J.A.R. 聚變核心 3D - 遊戲控制器與情感導演系統 (GameController v8.0)
 // =========================================================================
 
-// --- 1. 生涯進度與成就管理器 (Career & Progress) ---
 const CareerManager = {
   data: {
     maxQ: 0.0,
     totalSurvivalSeconds: 0,
-    currentMissionIndex: 0,
+    missionsCompleted: 0,
     rank: '實習操作員'
   },
 
@@ -34,108 +33,117 @@ const CareerManager = {
 
   updateRank() {
     const q = this.data.maxQ;
-    const m = this.data.currentMissionIndex;
-    if (m >= 2 && q >= 1.5) this.data.rank = '深空聚變大師 (Master)';
-    else if (m >= 1 && q >= 1.1) this.data.rank = '托卡馬克首席工程師 (Chief)';
+    const m = this.data.missionsCompleted;
+    if (m >= 5 && q >= 1.5) this.data.rank = '深空聚變大師 (Master)';
+    else if (m >= 3 && q >= 1.1) this.data.rank = '托卡馬克首席工程師 (Chief)';
     else if (q >= 0.9) this.data.rank = '資深值班操作員 (Senior)';
     else this.data.rank = '實習操作員 (Trainee)';
   }
 };
 
-// --- 2. 情境任務鏈狀態機 (Scenario Mission Engine) ---
-const MissionEngine = {
-  missions: [
-    {
-      id: 0,
-      nameZh: '任務 1：為深空基地供電',
-      nameEn: 'Mission 1: Deep Space Base Power',
-      descZh: '維持 Q ≥ 1.05 持續 20 秒',
-      descEn: 'Maintain Q ≥ 1.05 for 20 seconds',
-      targetQ: 1.05,
-      requiredDuration: 20,
-      currentProgress: 0,
-      timeLimit: 60
-    },
-    {
-      id: 1,
-      nameZh: '任務 2：躍遷引擎超載充能',
-      nameEn: 'Mission 2: Warp Core Overcharge',
-      descZh: '維持 Te ≥ 18 keV 且 Q ≥ 1.20 持續 25 秒',
-      descEn: 'Maintain Te ≥ 18 keV and Q ≥ 1.20 for 25s',
-      targetQ: 1.20,
-      targetTe: 18.0,
-      requiredDuration: 25,
-      currentProgress: 0,
-      timeLimit: 75
-    }
-  ],
-
-  active: true,
+const DynamicMissionEngine = {
+  currentQuest: null,
   timer: 0,
 
-  getCurrent() {
-    return this.missions[CareerManager.data.currentMissionIndex] || this.missions[0];
+  generateQuest(st) {
+    if (st.tempE0 < 10.0) {
+      return {
+        id: 'IGNITE_PREHEAT',
+        titleZh: '階段任務：核心電離預熱',
+        titleEn: 'Objective: Core Ionization Preheat',
+        descZh: '提升微波加熱使 Te ≥ 15 keV，且維持 q95 > 2.5',
+        descEn: 'Heat core to Te ≥ 15 keV while keeping q95 > 2.5',
+        check: (s) => s.tempE0 >= 15.0 && s.q95 > 2.5,
+        targetDuration: 12.0,
+        currentProgress: 0.0
+      };
+    } else if (st.isHMode && st.betaN > 2.2) {
+      return {
+        id: 'ELM_SURVIVE',
+        titleZh: '緊急應變：邊緣輸運壘壓力洩放',
+        titleEn: 'Warning: Relieve ETB Pressure Barrier',
+        descZh: '控制偏濾器將 β_N 穩定在 2.4 以下，避免觸發 Type-I ELM',
+        descEn: 'Purge divertor to keep β_N < 2.4 to prevent ELM burst',
+        check: (s) => s.betaN < 2.4 && s.qGain > 0.8,
+        targetDuration: 15.0,
+        currentProgress: 0.0
+      };
+    } else {
+      return {
+        id: 'SUSTAINED_BURNING',
+        titleZh: '終極目標：實現自持燃燒點火',
+        titleEn: 'Ultimate: Achieve Self-Sustained Burning',
+        descZh: '保持能量增益 Q ≥ 1.10 超過 20 秒',
+        descEn: 'Maintain Fusion Gain Q ≥ 1.10 for 20s',
+        check: (s) => s.qGain >= 1.10,
+        targetDuration: 20.0,
+        currentProgress: 0.0
+      };
+    }
   },
 
   update(st, dt) {
-    if (!this.active || st.gameOver) return;
-    const m = this.getCurrent();
+    if (!this.currentQuest) {
+      this.currentQuest = this.generateQuest(st);
+    }
+
+    const q = this.currentQuest;
     this.timer += dt;
 
-    let conditionMet = st.qGain >= m.targetQ;
-    if (m.targetTe) conditionMet = conditionMet && st.tempE0 >= m.targetTe;
-
-    if (conditionMet) {
-      m.currentProgress = Math.min(m.currentProgress + dt, m.requiredDuration);
-      if (m.currentProgress >= m.requiredDuration) {
-        this.active = false;
-        GameController.triggerMissionVictory(m);
+    if (q.check(st)) {
+      q.currentProgress = Math.min(q.currentProgress + dt, q.targetDuration);
+      if (q.currentProgress >= q.targetDuration) {
+        CareerManager.data.missionsCompleted++;
+        GameController.triggerMissionVictory(q);
+        this.currentQuest = this.generateQuest(st);
       }
     } else {
-      m.currentProgress = Math.max(0, m.currentProgress - dt * 0.5);
+      q.currentProgress = Math.max(0, q.currentProgress - dt * 0.6);
     }
-  },
-
-  nextMission() {
-    CareerManager.data.currentMissionIndex++;
-    if (CareerManager.data.currentMissionIndex >= this.missions.length) {
-      CareerManager.data.currentMissionIndex = 0;
-    }
-    CareerManager.save();
-    this.reset();
   },
 
   reset() {
-    const m = this.getCurrent();
-    m.currentProgress = 0;
+    this.currentQuest = null;
     this.timer = 0;
-    this.active = true;
   }
 };
 
-// --- 3. 事故黑盒子歸因分析器 (Incident Analyzer) ---
 const IncidentAnalyzer = {
   analyze(st) {
     let cause = '未知物理失穩';
     let advice = '請保持各項參數在綠色安全區間內運行。';
+    let triggerMetric = '';
 
-    if (st.q95 < 2.0) {
+    if (st.deltaZ > 0.35) {
+      cause = 'VDE 垂直位移不穩定性撞壁 (Vertical Displacement Collision)';
+      advice = '等離子體伸長率過高且極向控制線圈飽和。請在加熱時保持等離子體電流 I_p 穩定。';
+      triggerMetric = `δZ = ${st.deltaZ.toFixed(2)}m (極限: 0.35m)`;
+    } else if (st.peakDivertorHeatFlux_MW_m2 > 12.0) {
+      cause = '偏濾器靶板 Eich 熱流通量超限融毀 (Divertor Heatflux Exhaust Failure)';
+      advice = '刮削層 λ_q 過窄導致靶板局部熱流過載。請適時開啟偏濾器排氣或提高環向磁場 B_T。';
+      triggerMetric = `q_div = ${st.peakDivertorHeatFlux_MW_m2.toFixed(1)} MW/m² (極限: 12.0)`;
+    } else if (st.q95 < 2.0) {
       cause = 'q95 < 2.0 MHD 撕裂模大破裂 (Kink Tearing Disruption)';
-      advice = '等離子體電流 I_p 過高或環向磁場 B_T 不足。請嘗試提升磁場至 7.0T 以上或降低電流。';
+      advice = '等離子體電流 Ip 過高導致磁力線失穩。請提高環向磁場 B_T 或下調電流。';
+      triggerMetric = `q95 = ${st.q95.toFixed(2)} (臨界值: 2.0)`;
     } else if (st.betaN > 2.8) {
       cause = 'Troyon β_N 壓力極限突破 (Troyon Limit Exceeded)';
       advice = '等離子體熱壓力過大引發邊緣失穩。在加熱功率接近臨界值時，應及時開啟偏濾器排熱。';
+      triggerMetric = `β_N = ${st.betaN.toFixed(2)} (臨界值: 2.8)`;
     } else if (st.greenwaldRatio > 1.0) {
-      cause = '格林沃德密度超限引發輻射坍縮 (Greenwald Density Collapse)';
-      advice = '燃料注入過多導致等離子體冷卻猝滅。請減少燃料顆粒注入頻率，或提高加熱功率平衡能量。';
+      cause = '格林沃德密度超限引發輻射坍縮 (Greenwald Collapse)';
+      advice = '燃料注入過多導致等離子體猝滅。請減少燃料注入頻率或提高加熱功率。';
+      triggerMetric = `n/n_G = ${st.greenwaldRatio.toFixed(2)} (臨界值: 1.0)`;
     } else if (st.maxIntegrity <= 0) {
       cause = '第一壁材料累積熱疲勞融毀 (First Wall Melted)';
-      advice = '第一壁長時間承受高溫熱流衝擊。下次請在失穩發生時第一時間長按故障線圈進行電弧焊接修復。';
+      advice = '第一壁長時間承受高溫熱流衝擊。下次請在失穩發生時第一時間長按故障線圈修復。';
+      triggerMetric = `Integrity = 0.0%`;
     }
 
     return {
       cause,
       advice,
+      triggerMetric,
       q: st.qGain.toFixed(2),
       temp: `${Math.max(st.tempE0, st.tempI0).toFixed(1)} keV`,
       q95: st.q95.toFixed(2),
@@ -144,7 +152,6 @@ const IncidentAnalyzer = {
   }
 };
 
-// --- 4. GameController 主物件 ---
 const GameController = {
   camera: null,
   hasDisrupted: false,
@@ -158,17 +165,12 @@ const GameController = {
       const pause = Math.round(25 * (1 / pitchRatio));
       navigator.vibrate([duration, pause, Math.round(duration * 0.6)]);
     },
-
     triggerIgnitionBurst() {
-      if (!navigator.vibrate) return;
-      navigator.vibrate([40, 30, 80, 40, 160]);
+      if (navigator.vibrate) navigator.vibrate([40, 30, 80, 40, 160]);
     },
-
     triggerDisruption() {
-      if (!navigator.vibrate) return;
-      navigator.vibrate([140, 30, 90, 30, 50, 20, 20]);
+      if (navigator.vibrate) navigator.vibrate([140, 30, 90, 30, 50, 20, 20]);
     },
-
     pulseWelding() {
       if (navigator.vibrate && Math.random() < 0.35) navigator.vibrate(12);
     }
@@ -178,24 +180,22 @@ const GameController = {
     this.camera = camera;
     CareerManager.load();
     AudioSys.init();
-    MissionEngine.reset();
+    DynamicMissionEngine.reset();
     this.hasDisrupted = false;
     this.hasIgnited = false;
   },
 
-  update(st, now, dt, coilMeshes) {
+  update(st, now, dt, coilMeshes, telemetryHistory) {
     if (!AudioSys.ctx) return;
 
     if (this.camera) AudioSys.updateListener(this.camera);
     AudioSys.updateSoundscape(st);
 
-    // 推進任務與生涯累積
     if (!st.gameOver) {
-      MissionEngine.update(st, dt);
+      DynamicMissionEngine.update(st, dt);
       CareerManager.recordMetrics(st.qGain, dt);
     }
 
-    // 連續點火張力調製
     if (st.qGain >= 1.0 && !this.hasIgnited) {
       this.hasIgnited = true;
       AudioSys.playIgnitionFanfare();
@@ -205,24 +205,21 @@ const GameController = {
       AudioSys.isIgnited = false;
     }
 
-    // 故障線圈警報
     this.updateCoilAlerts(st, now, coilMeshes);
 
-    // ELM 爆發
     if (st.elmBurst) {
       AudioSys.triggerSidechainDucking(0.5, 0.05, 0.25);
       AudioSys.playTone(340, 'sawtooth', 0.12, 0.09);
       if (navigator.vibrate) navigator.vibrate(40);
     }
 
-    // 大破裂觸發事故歸因報告
     if (st.gameOver && !this.hasDisrupted) {
       this.hasDisrupted = true;
       AudioSys.playDisruptionBurst();
       this.haptics.triggerDisruption();
       
       const report = IncidentAnalyzer.analyze(st);
-      UI.showIncidentReport(report);
+      UI.showIncidentReport(report, telemetryHistory);
     }
   },
 
@@ -248,25 +245,25 @@ const GameController = {
     }
   },
 
-  triggerMissionVictory(mission) {
+  triggerMissionVictory(quest) {
     CareerManager.updateRank();
     AudioSys.playIgnitionFanfare();
-    UI.showVictoryModal(mission, CareerManager.data.rank);
+    UI.showVictoryModal(quest, CareerManager.data.rank);
   },
 
   restartSimulation() {
-    FusionPhysics.state.tempE0 = 2.5;
-    FusionPhysics.state.tempI0 = 1.8;
-    FusionPhysics.state.density0 = 1.2;
+    FusionPhysics.initProfiles();
     FusionPhysics.state.integrity = 100.0;
     FusionPhysics.state.maxIntegrity = 100.0;
     FusionPhysics.state.kinkDistortion = 0.0;
+    FusionPhysics.state.magneticIslandWidth = 0.0;
+    FusionPhysics.state.deltaZ = 0.0;
     FusionPhysics.state.failingCoilIndex = -1;
     FusionPhysics.state.gameOver = false;
 
     this.hasDisrupted = false;
     this.hasIgnited = false;
-    MissionEngine.reset();
+    DynamicMissionEngine.reset();
     UI.hideModals();
   },
 
