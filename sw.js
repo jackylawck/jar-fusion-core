@@ -1,4 +1,4 @@
-const CACHE_NAME = 'jar-fusion-core-v3.4-live';
+const CACHE_NAME = 'jar-fusion-core-v8.2-icons';
 const STATIC_ASSETS = [
   './',
   './index.html',
@@ -9,6 +9,8 @@ const STATIC_ASSETS = [
   './ui.js',
   './main.js',
   './manifest.json',
+  './jarfusioncore192icon.png',
+  './jarfusioncore512icon.png',
   'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js',
   'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js',
   'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/STLLoader.js',
@@ -19,48 +21,3 @@ const STATIC_ASSETS = [
   'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/LuminosityHighPassShader.js',
   'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js'
 ];
-
-self.addEventListener('install', (e) => {
-  e.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(STATIC_ASSETS))
-  );
-  self.skipWaiting();
-});
-
-self.addEventListener('activate', (e) => {
-  e.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(
-        keys.map((k) => {
-          if (k !== CACHE_NAME) return caches.delete(k);
-        })
-      )
-    )
-  );
-  self.clients.claim();
-});
-
-// Stale-While-Revalidate 策略
-self.addEventListener('fetch', (e) => {
-  e.respondWith(
-    caches.match(e.request).then((cached) => {
-      const networked = fetch(e.request)
-        .then((res) => {
-          if (res && res.status === 200) {
-            const resClone = res.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(e.request, resClone));
-          }
-          return res;
-        })
-        .catch(() => cached);
-
-      return cached || networked;
-    })
-  );
-});
-
-self.addEventListener('message', (e) => {
-  if (e.data === 'SKIP_WAITING') {
-    self.skipWaiting();
-  }
-});
