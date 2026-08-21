@@ -1,5 +1,5 @@
 // =========================================================================
-// J.A.R. 聚變核心 3D - 100% 全雙語介面與證書系統 (ui.js v14.0 Release)
+// J.A.R. 聚變核心 3D - 100% 全雙語介面與證書系統 (ui.js v15.0 Gold)
 // =========================================================================
 
 const I18N = {
@@ -9,7 +9,7 @@ const I18N = {
     zh: {
       toggleBtn: 'English',
       btnCert: '📜 授權證書',
-      wallIntegrity: '第一壁材料狀態',
+      wallIntegrity: '第一壁狀態',
       poloidalFlux: '極向磁通量表面 Ψ(R,Z)',
       dualTemp: '雙溫分離 (Te / Ti)',
       safetyFactor: '安全因子 q₉₅ / 歸一化 β_N',
@@ -70,7 +70,7 @@ const I18N = {
     en: {
       toggleBtn: '中文',
       btnCert: '📜 License Card',
-      wallIntegrity: 'First Wall Integrity',
+      wallIntegrity: 'First Wall',
       poloidalFlux: 'Poloidal Flux Surfaces Ψ(R,Z)',
       dualTemp: 'Two-Fluid Temp (Te / Ti)',
       safetyFactor: 'Safety Factor q₉₅ / Norm β_N',
@@ -152,6 +152,15 @@ const I18N = {
     this.currentLang = this.currentLang === 'zh' ? 'en' : 'zh';
     this.applyLanguage(dom);
     UI.renderDynamicControlSliders();
+    
+    // 強制刷新任務即時文本
+    const q = DynamicMissionEngine.currentQuest;
+    if (q && dom && dom.missionName) {
+      const isZh = this.currentLang === 'zh';
+      dom.missionName.innerText = isZh ? q.titleZh : q.titleEn;
+      dom.missionDesc.innerText = isZh ? q.descZh : q.descEn;
+    }
+
     if (document.getElementById('tutorial-guide')) {
       UI.showTutorialStep(UI._currentTutStep || 0);
     }
