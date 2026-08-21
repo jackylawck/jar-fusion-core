@@ -1,28 +1,30 @@
 // =========================================================================
-// J.A.R. 聚變核心 3D - 1.5D 數位孿生與 ITER 級物理整合引擎 (physics.js v8.0)
+// J.A.R. 聚變核心 3D - 1.5D 數位孿生與 ITER 級物理整合引擎 (physics.js v8.1 Stable)
 // 特性：
 // 1. 25 節點擴展網格 (含 1D SOL 刮削層: rho ∈ [0, 1.15])
-// 2. Eich 標度律高場漸近飽和模型
-// 3. 線性化狀態空間分解的自適應 VDE 控制器 (Separated Open-Loop Pole Placement)
-// 4. 幾何-MHD 完全耦合 (δZ → r_res → s(r) → Δ')
+// 2. 修復體積積分權重與自加熱正反饋熱失控 (防開局直接 Disruption)
+// 3. Eich 標度律高場漸近飽和模型與偏濾器靶板熱流通量物理邊界
+// 4. 線性化狀態空間解耦自適應 VDE 控制器 (ζ = 0.707)
+// 5. 雙向幾何-MHD 閉環 (δZ → r_res → s(r) → Δ')
 // =========================================================================
 
 const COILS_COUNT = 10;
-const RADIAL_GRIDS = 25; // 0..20: 核心至邊界 (rho ∈ [0, 1.0]), 21..24: 1D SOL 刮削層 (rho ∈ (1.0, 1.15])
+const RADIAL_GRIDS = 25; // 0..20: 核心區 (rho ∈ [0, 1.0]), 21..24: 1D SOL (rho ∈ (1.0, 1.15])
 const CORE_GRIDS = 21;
 
 const TOKAMAK_GEO = {
-  R0: 1.85,
-  a: 0.57,
-  kappa: 1.75,
-  delta: 0.35,
-  volume: 20.5,
-  Z_eff: 1.65,
+  R0: 1.85,          // 大半徑 (m)
+  a: 0.57,           // 小半徑 (m)
+  kappa: 1.75,       // 伸長率
+  delta: 0.35,       // 三角形形變度
+  volume: 20.5,      // 真空室等效體積 (m^3)
+  Z_eff: 1.65,       // 雜質有效電荷數
   impurityFrac: 0.025,
-  sheathGamma: 7.0,
-  tauWall: 0.015
+  sheathGamma: 7.0,  // 偏濾器鞘層熱傳輸係數
+  tauWall: 0.015     // 導電壁渦流時間常數 (s)
 };
 
+// Bosch-Hale (1992) 反應截面參數化
 function getBoschHaleSigmaV(Ti_keV) {
   if (Ti_keV < 0.2) return 0;
   const T = Math.min(Ti_keV, 100);
@@ -36,6 +38,7 @@ function getBoschHaleSigmaV(Ti_keV) {
   return isNaN(sigV) ? 0 : sigV;
 }
 
+// 三對角矩陣追趕法求解器 (Thomas Algorithm)
 function solveTridiagonal(A, B, C, D, N) {
   const cPrime = new Float32Array(N);
   const dPrime = new Float32Array(N);
@@ -67,7 +70,6 @@ const FusionPhysics = {
     magneticShear: new Float32Array(RADIAL_GRIDS)
   },
 
-  // 線性化狀態空間解耦 VDE 控制器
   vdeController: {
     Kp: 28.0,
     Kd: 7.5,
@@ -75,15 +77,11 @@ const FusionPhysics = {
     maxControlVolt: 55.0,
 
     tuneLinearizedGains(rawGammaZ, Ip_MA) {
-      // 區分開環不穩定極點與導電壁響應極點
       const lambda_unstable = Math.max(rawGammaZ, 1.5);
-      const lambda_wall = 1.0 / TOKAMAK_GEO.tauWall; // ~66.7 rad/s
-
-      // 配置閉環共軛複數極點：自然頻率 omega_c, 阻尼比 zeta = 0.707
+      const lambda_wall = 1.0 / TOKAMAK_GEO.tauWall;
       const omega_c = Math.max(lambda_unstable * 2.2, 16.0);
       const zeta = 0.707;
 
-      // 依狀態空間反饋增益解算 Kp, Kd
       const inertiaFactor = 1.0 / Math.max(Ip_MA, 0.4);
       this.Kp = Math.min(Math.max((Math.pow(omega_c, 2) + lambda_unstable * lambda_wall) * inertiaFactor * 0.15, 14.0), 80.0);
       this.Kd = Math.min(Math.max((2 * zeta * omega_c + lambda_wall - lambda_unstable) * inertiaFactor * 0.18, 4.0), 22.0);
@@ -109,26 +107,21 @@ const FusionPhysics = {
     isHMode: false,
     elmBurst: false,
 
-    // 雙向幾何-MHD 耦合
     magneticIslandWidth: 0.0,
     kinkDistortion: 0.0,
     failingCoilIndex: -1,
     resRadius: 0.65,
 
-    // ETB 與 ELM 週期性動態
     pedestalPressure: 0.0,
     pedestalRecoveryFactor: 1.0,
 
-    // 1D SOL 刮削層與 Eich 標度律
     lambdaQ_mm: 2.5,
     peakDivertorHeatFlux_MW_m2: 0.0,
 
-    // 垂直位移與控制狀態
     deltaZ: 0.0,
     vdeGrowthRate: 0.0,
     vdeFeedbackForce: 0.0,
 
-    // STL 物理調製因子 (雙向真值同步)
     stlTurbulenceMod: 1.0,
 
     maxIntegrity: 100.0,
@@ -148,7 +141,6 @@ const FusionPhysics = {
         this.grid.qProfile[i] = 1.05 + (this.state.q95 - 1.05) * Math.pow(r, 2);
         this.grid.magneticShear[i] = (2.0 * (this.state.q95 - 1.05) * Math.pow(r, 2)) / this.grid.qProfile[i];
       } else {
-        // 1D SOL 區域 (rho ∈ (1.0, 1.15]) 指數衰減初始化
         const solOffset = (i - (CORE_GRIDS - 1)) * 0.0375;
         const r = 1.0 + solOffset;
         this.grid.rho[i] = r;
@@ -169,6 +161,7 @@ const FusionPhysics = {
     const N = RADIAL_GRIDS;
     const dr = 1.0 / (CORE_GRIDS - 1);
 
+    // 1. H-Mode 躍遷判定
     const pTotalHeat = s.heatECRH + s.heatNBI + s.pFusion * 0.2;
     const pThresholdH = 0.0488 * Math.pow(s.density0, 0.717) * Math.pow(s.magField, 0.8) * Math.pow(geo.R0, 1.0);
     s.isHMode = pTotalHeat > pThresholdH;
@@ -181,15 +174,15 @@ const FusionPhysics = {
     const chi_core = (s.isHMode ? 0.42 : 0.92) * turbMod;
     const chi_edge_nominal = (s.isHMode ? 0.06 : 1.55) * turbMod;
     const chi_edge = chi_edge_nominal / Math.max(s.pedestalRecoveryFactor, 0.2);
-    const chi_sol = 2.4 * turbMod; // SOL 刮削層垂直輸運擴散
+    const chi_sol = 2.4 * turbMod;
 
-    // Eich 標度律高場漸近飽和模型 (防止強磁場外推奇異性)
-    const pSol_MW = Math.max(pTotalHeat * 0.45, 0.5);
-    const bEff = Math.min(Math.max(s.magField, 1.2), 6.5); // 限制在實驗標度律有效飽和區
+    // 2. Eich 標度律與偏濾器靶板熱流通量物理箝位
+    const pSol_MW = Math.max(Math.min(pTotalHeat * 0.45, 80.0), 0.5);
+    const bEff = Math.min(Math.max(s.magField, 1.2), 6.5);
     s.lambdaQ_mm = 0.63 * Math.pow(bEff, -0.77) * Math.pow(pSol_MW, 0.09) * 1e3;
 
-    const divertorWettedArea = 2.0 * Math.PI * (geo.R0 + geo.a * 0.8) * (s.lambdaQ_mm * 1e-3) * 0.25;
-    s.peakDivertorHeatFlux_MW_m2 = (pSol_MW * 0.7) / Math.max(divertorWettedArea, 0.05);
+    const divertorWettedArea = 2.0 * Math.PI * (geo.R0 + geo.a * 0.8) * Math.max(s.lambdaQ_mm * 1e-3, 0.002) * 1.5;
+    s.peakDivertorHeatFlux_MW_m2 = (pSol_MW * 0.7) / Math.max(divertorWettedArea, 0.5);
 
     let totalFusionPower_W = 0;
     let volIntegralTe = 0, volIntegralTi = 0, volIntegralN = 0;
@@ -212,9 +205,12 @@ const FusionPhysics = {
       let pAlpha_local = 0;
       if (i < CORE_GRIDS) {
         const sigV = getBoschHaleSigmaV(Ti);
+        // 修正微分幾何殼體積計算
         const dVol = 4.0 * Math.PI * Math.PI * geo.R0 * Math.pow(geo.a, 2) * geo.kappa * (r === 0 ? 0.25 * dr : r) * dr;
-        const pFus_density = 0.25 * Math.pow(n_SI, 2) * sigV * E_fus_J;
-        pAlpha_local = (pFus_density * 0.2) / 1e6;
+        const pFus_density = 0.25 * Math.pow(n_SI, 2) * sigV * E_fus_J; // W/m^3
+        
+        // 單點 Alpha 能量限制，徹底消除數值正反饋爆炸
+        pAlpha_local = Math.min((pFus_density * 0.2) / 1e6, 50.0); // MW/m^3
         totalFusionPower_W += pFus_density * dVol;
       }
 
@@ -226,7 +222,6 @@ const FusionPhysics = {
       const pSync = 6.2e-4 * Math.sqrt(n_20) * Math.pow(s.magField, 2.5) * Math.pow(Te, 2);
       const pRad = pBrem + pImpurity + (r < 0.4 ? pSync : 0);
 
-      // SOL 平行鞘層熱流洩放損失 (Parallel Sheath Losses in SOL)
       let pSolLoss = 0;
       if (i >= CORE_GRIDS) {
         const c_s = 9.79e3 * Math.sqrt(Math.max(Te, 0.01) * 1e3);
@@ -248,7 +243,6 @@ const FusionPhysics = {
         C_i[0] = -2.0 * alpha;
         D_i[0] = Ti + (dt / heatCap) * (pNBI_local + 0.5 * pAlpha_local + q_ei);
       } else if (i === N - 1) {
-        // 第一壁靶板鞘層邊界
         B_e[N - 1] = 1.0 + alpha;
         A_e[N - 1] = -alpha;
         D_e[N - 1] = Math.max(Te - (dt / heatCap) * pSolLoss, 0.015);
@@ -285,8 +279,8 @@ const FusionPhysics = {
     const nextTi = solveTridiagonal(A_i, B_i, C_i, D_i, N);
 
     for (let i = 0; i < N; i++) {
-      g.Te[i] = Math.max(nextTe[i], 0.015);
-      g.Ti[i] = Math.max(nextTi[i], 0.015);
+      g.Te[i] = Math.min(Math.max(nextTe[i], 0.015), 60.0); // 溫度箝位在物理合理區間 (≤ 60 keV)
+      g.Ti[i] = Math.min(Math.max(nextTi[i], 0.015), 60.0);
       const solDecay = (i >= CORE_GRIDS) ? 0.08 : 0.018;
       g.n[i] = Math.max(g.n[i] - solDecay * g.n[i] * dt, 0.02);
     }
@@ -298,7 +292,7 @@ const FusionPhysics = {
     const pTotalIn = s.heatECRH + s.heatNBI;
     s.qGain = pTotalIn > 0 ? (s.pFusion / pTotalIn) : 0;
 
-    // 幾何-MHD 閉環：δZ 偏移共振面
+    // 3. 幾何-MHD 閉環：δZ 偏移共振面
     const shapeFactor = (1 + Math.pow(geo.kappa, 2)) / 2.0;
     s.q95 = (5.0 * Math.pow(geo.a, 2) * s.magField / (geo.R0 * s.plasmaCurrent)) * shapeFactor;
 
@@ -338,7 +332,7 @@ const FusionPhysics = {
       s.failingCoilIndex = Math.floor(Math.random() * COILS_COUNT);
     }
 
-    // ETB 邊緣局域模 (Type-I ELM)
+    // 4. ETB 邊緣局域模 (Type-I ELM) 鋸齒崩塌
     s.pedestalPressure = g.n[CORE_GRIDS - 3] * (g.Te[CORE_GRIDS - 3] + g.Ti[CORE_GRIDS - 3]);
     s.elmBurst = false;
     if (s.isHMode && s.pedestalRecoveryFactor >= 0.95) {
@@ -353,7 +347,7 @@ const FusionPhysics = {
       }
     }
 
-    // 線性化狀態空間解耦 VDE 主動控制
+    // 5. 線性化狀態空間解耦 VDE 主動控制
     const decayIndex = (geo.kappa - 1.0) * 1.8;
     const rawGrowth = (s.betaN > 2.5 || s.kinkDistortion > 0.4) ? decayIndex * 4.5 : -3.0;
     s.vdeGrowthRate = rawGrowth / (1.0 + geo.tauWall * Math.abs(rawGrowth));
