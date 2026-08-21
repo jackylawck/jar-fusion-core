@@ -83,6 +83,17 @@ const FusionPhysics = {
     gameOver: false
   },
 
+  // 接收自訂 3D 打印 STL 幾何參數並反饋於物理邊界條件
+  applyCoreGeometryModifiers(triangleCount, aspectRatio, maxDim) {
+    const complexityFactor = Math.min(Math.max(triangleCount / 5000, 0.5), 2.5);
+    this.state.alphaT = 1.5 * (1.0 / Math.sqrt(complexityFactor));
+    this.state.alphaN = 1.0 * Math.min(Math.max(aspectRatio, 0.7), 1.4);
+    
+    if (window.AudioSys) {
+      AudioSys.playTone(520, 'triangle', 0.25, 0.08);
+    }
+  },
+
   getDerivatives(Te0, Ti0, n0) {
     const s = this.state;
     const geo = TOKAMAK_GEO;
@@ -124,6 +135,7 @@ const FusionPhysics = {
     const s = this.state;
     const geo = TOKAMAK_GEO;
 
+    // RK4 數值積分
     const subSteps = 4;
     const subDt = dt / subSteps;
     let finalFusion = 0, finalAvgTe = 0, finalAvgTi = 0, finalAvgN = 0, hModeState = false;
@@ -153,11 +165,13 @@ const FusionPhysics = {
     s.qGain = pTotalIn > 0 ? (s.pFusion / pTotalIn) : 0;
     s.density0 = Math.max(s.density0 - 0.015 * dt, 0.15);
 
+    // 安全因子 q95 與 Greenwald 密度比
     const shapeFactor = (1 + Math.pow(geo.kappa, 2)) / 2.0;
     s.q95 = (5.0 * Math.pow(geo.a, 2) * s.magField / (geo.R0 * s.plasmaCurrent)) * shapeFactor;
     const n_Greenwald = s.plasmaCurrent / (Math.PI * Math.pow(geo.a, 2));
     s.greenwaldRatio = s.density0 / n_Greenwald;
 
+    // Troyon Beta_N 與 Shafranov 位移
     const pAvg_Pa = (finalAvgN * 1e20) * ((finalAvgTe + finalAvgTi) * 1e3 * 1.60218e-19);
     const bPressure_Pa = Math.pow(s.magField, 2) / (2 * 4 * Math.PI * 1e-7);
     const beta_t_percent = (pAvg_Pa / bPressure_Pa) * 100.0;
@@ -165,11 +179,13 @@ const FusionPhysics = {
     const beta_p = beta_t_percent * Math.pow(s.q95, 2);
     s.shafranovShift = (Math.pow(geo.a, 2) / (2 * geo.R0)) * Math.min(beta_p * 0.1 + 0.5, 2.5);
 
+    // ELM 爆發判定
     s.elmBurst = false;
     if (s.isHMode && s.betaN > 2.8 && Math.random() < 0.08) {
       s.elmBurst = true;
     }
 
+    // 確定性失穩判定
     const isUnstable = (s.q95 < 2.0) || (s.greenwaldRatio > 1.0) || (s.betaN > 3.5);
     if (isUnstable) {
       s.kinkTimer += dt;
@@ -183,6 +199,7 @@ const FusionPhysics = {
     if (s.failingCoilIndex !== -1) s.kinkDistortion = Math.min(s.kinkDistortion + 1.2 * dt, 2.5);
     else s.kinkDistortion *= Math.exp(-3.0 * dt);
 
+    // 第一壁材料損傷計算
     let activeDamage = 0;
     if (s.kinkDistortion > 0.1) activeDamage += s.kinkDistortion * 18.0;
     if (s.elmBurst) activeDamage += 8.0;
