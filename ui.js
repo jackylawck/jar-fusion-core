@@ -1,5 +1,5 @@
 // =========================================================================
-// J.A.R. 聚變核心 3D - 100% 全雙語介面與證書系統 (ui.js v15.0 Gold)
+// J.A.R. 聚變核心 3D - 100% 全雙語介面與證書系統 (ui.js v15.2 Gold)
 // =========================================================================
 
 const I18N = {
@@ -69,35 +69,35 @@ const I18N = {
     },
     en: {
       toggleBtn: '中文',
-      btnCert: '📜 License Card',
+      btnCert: '📜 License',
       wallIntegrity: 'First Wall',
-      poloidalFlux: 'Poloidal Flux Surfaces Ψ(R,Z)',
+      poloidalFlux: 'Poloidal Flux Ψ(R,Z)',
       dualTemp: 'Two-Fluid Temp (Te / Ti)',
-      safetyFactor: 'Safety Factor q₉₅ / Norm β_N',
+      safetyFactor: 'Safety q₉₅ / Norm β_N',
       energyGain: 'Fusion Gain Q',
-      solHeatLabel: 'SOL Heatflux / Density Limit',
-      ecrhPower: 'ECRH Heating P_ECRH',
-      nbiPower: 'NBI Heating P_NBI',
+      solHeatLabel: 'SOL Heatflux / Limit',
+      ecrhPower: 'ECRH Heating',
+      nbiPower: 'NBI Heating',
       toroidalField: 'Toroidal Field B_T',
       plasmaCurrent: 'Plasma Current I_p',
-      pumpingSpeed: 'Divertor Pump Speed',
-      fluxExpansion: 'Flux Expansion f_exp',
-      csFluxRate: 'CS Loop Flux dPhi/dt',
-      deltaShape: 'Triangularity delta',
-      neonSeeding: 'Neon Gas Seeding',
-      injectFuel: 'Inject D-T Fuel Pellet',
-      divertorPurge: 'Purge Divertor Exhaust',
-      loadStl: '📁 Load 3D Print STL Core',
+      pumpingSpeed: 'Pump Speed',
+      fluxExpansion: 'Flux Expansion',
+      csFluxRate: 'CS Flux Rate',
+      deltaShape: 'Triangularity',
+      neonSeeding: 'Neon Seeding',
+      injectFuel: 'Inject D-T Pellet',
+      divertorPurge: 'Purge Divertor',
+      loadStl: '📁 Load STL Core',
       repairing: 'REPAIRING COIL',
-      incidentTitle: 'Incident Black Box Diagnostic',
+      incidentTitle: 'Black Box Diagnostic',
       primaryCause: 'PRIMARY CAUSE',
-      tacticalAdvice: 'NATIONAL ACADEMY ADVICE',
-      restartCore: 'RESTART REACTOR (STANDBY)',
-      powerStandby: '🟢 CORE POWER: STANDBY',
-      powerRunning: '🔴 CORE POWER: ONLINE',
+      tacticalAdvice: 'ACADEMY ADVICE',
+      restartCore: 'RESTART CORE (STANDBY)',
+      powerStandby: '🟢 CORE: STANDBY',
+      powerRunning: '🔴 CORE: ONLINE',
       modeEasy: '🟢 EASY MODE',
-      modeStandard: '🟡 STANDARD (6 PARAMS)',
-      modeAdvanced: '🔴 RESEARCH (9 PARAMS)',
+      modeStandard: '🟡 STANDARD (6P)',
+      modeAdvanced: '🔴 RESEARCH (9P)',
       hideHud: 'HIDE HUD',
       showHud: 'SHOW HUD',
       missionActive: 'MISSION ACTIVE',
@@ -105,25 +105,25 @@ const I18N = {
       reportTemp: 'Core Temp',
       reportQ95: 'Safety q95',
       reportGreenwald: 'Density n/nG',
-      telemetryTitle: '5-SEC TELEMETRY HISTORY REPLAY',
+      telemetryTitle: '5-SEC TELEMETRY REPLAY',
       victoryTitle: 'MISSION SUCCESS',
-      victoryDesc: 'Deep space base grid successfully connected to fusion core. Power output stable!',
+      victoryDesc: 'Base grid successfully connected to fusion core. Power output stable!',
       unlockRank: 'Rank Unlocked:',
-      nextMission: 'NEXT MISSION CHALLENGE',
-      certTitle: 'National Fusion Energy Academy License',
-      btnDownloadCert: '💾 Save Certificate Image',
+      nextMission: 'NEXT CHALLENGE',
+      certTitle: 'National Fusion Academy License',
+      btnDownloadCert: '💾 Save Certificate',
       btnCloseCert: 'Close',
-      diagTitle: '📐 3D CORE GEOMETRY DIAGNOSTIC',
+      diagTitle: '📐 3D CORE DIAGNOSTIC',
       diagTris: 'Triangles',
       diagTurb: 'Turbulence',
       diagImpact: 'Transport Penalty',
-      diagAdviceSafe: 'High symmetry geometric structure. Low plasma drag with enhanced tau_E.',
+      diagAdviceSafe: 'High symmetry structure with low drag and enhanced tau_E.',
       diagAdviceRough: 'Sharp edges increased turbulent transport and impurity desorption.',
-      tutStep1Title: 'Step 1: Energize Master Power',
+      tutStep1Title: 'Step 1: Energize Core',
       tutStep1Desc: 'Click the green power button below to inject and confine plasma.',
-      tutStep2Title: 'Step 2: Ramp Up ECRH Heating',
+      tutStep2Title: 'Step 2: Ramp Up Heating',
       tutStep2Desc: 'Slide P_ECRH above 15 MW and observe core electron temperature rise.',
-      tutStep3Title: 'Step 3: Sustain Fusion Breakeven',
+      tutStep3Title: 'Step 3: Sustain Breakeven',
       tutStep3Desc: 'Achieve ignition when Q ≥ 1.0! Purge divertor if wall gets too hot.',
       tutSkip: 'Skip',
       tutNext: 'Next'
@@ -146,20 +146,28 @@ const I18N = {
     }
     this.updateDropdownOptions(dom);
     CareerManager.updateRank();
-  },
-
-  toggleLanguage(dom) {
-    this.currentLang = this.currentLang === 'zh' ? 'en' : 'zh';
-    this.applyLanguage(dom);
-    UI.renderDynamicControlSliders();
     
-    // 強制刷新任務即時文本
+    // 即時刷新頂部官銜與統計
+    if (dom && dom.careerRank) {
+      const isZh = this.currentLang === 'zh';
+      dom.careerRank.innerText = isZh ? CareerManager.data.rankZh : CareerManager.data.rankEn;
+      const surviveLabel = isZh ? '存活' : 'Alive';
+      dom.careerStat.innerText = `Q_max: ${CareerManager.data.maxQ.toFixed(2)} | ${surviveLabel}: ${Math.floor(CareerManager.data.totalSurvivalSeconds)}s`;
+    }
+
+    // 強制即時同步任務名稱與描述
     const q = DynamicMissionEngine.currentQuest;
     if (q && dom && dom.missionName) {
       const isZh = this.currentLang === 'zh';
       dom.missionName.innerText = isZh ? q.titleZh : q.titleEn;
       dom.missionDesc.innerText = isZh ? q.descZh : q.descEn;
     }
+  },
+
+  toggleLanguage(dom) {
+    this.currentLang = this.currentLang === 'zh' ? 'en' : 'zh';
+    this.applyLanguage(dom);
+    UI.renderDynamicControlSliders();
 
     if (document.getElementById('tutorial-guide')) {
       UI.showTutorialStep(UI._currentTutStep || 0);
@@ -390,7 +398,8 @@ const UI = {
       if (el) {
         el.oninput = (e) => {
           FusionPhysics.state[prop] = parseFloat(e.target.value);
-          document.getElementById(lblId).innerText = `${FusionPhysics.state[prop].toFixed(1)} ${unit}`;
+          const valText = unit ? `${FusionPhysics.state[prop].toFixed(1)} ${unit}` : `${FusionPhysics.state[prop].toFixed(1)}`;
+          document.getElementById(lblId).innerText = valText;
         };
       }
     };
@@ -738,13 +747,19 @@ const UI = {
     const cy = h / 2 - (deltaZ * 25.0);
     const numSurfaces = 6;
 
+    // 動態磁力線縮放響應
+    const currentIp = FusionPhysics.state.plasmaCurrent;
+    const currentBt = FusionPhysics.state.magField;
+    const dynamicKappa = kappa * (1.0 + (currentIp - 1.2) * 0.12);
+    const dynamicRScale = (1.0 - (currentBt - 6.0) * 0.025);
+
     ctx.strokeStyle = '#334155';
     ctx.lineWidth = 1.5;
     ctx.beginPath();
     for (let a = 0; a <= Math.PI * 2; a += 0.1) {
       const rWall = 60;
       const x = cx + (rWall * Math.cos(a + delta * Math.sin(a)));
-      const y = (h / 2) + (rWall * kappa * Math.sin(a));
+      const y = (h / 2) + (rWall * dynamicKappa * Math.sin(a));
       if (a === 0) ctx.moveTo(x, y);
       else ctx.lineTo(x, y);
     }
@@ -753,7 +768,7 @@ const UI = {
 
     for (let i = 1; i <= numSurfaces; i++) {
       const rho = i / numSurfaces;
-      const r = (50 + pulse * (1 - rho)) * rho;
+      const r = (50 * dynamicRScale + pulse * (1 - rho)) * rho;
       const shiftX = (shafranovShift * 60) * (1 - Math.pow(rho, 2));
 
       ctx.strokeStyle = i === numSurfaces ? '#38bdf8' : `rgba(0, 240, 255, ${0.15 + rho * 0.45})`;
@@ -762,7 +777,7 @@ const UI = {
 
       for (let a = 0; a <= Math.PI * 2; a += 0.1) {
         const px = cx + shiftX + (r * Math.cos(a + delta * Math.sin(a)));
-        const py = cy + (r * kappa * Math.sin(a));
+        const py = cy + (r * dynamicKappa * Math.sin(a));
         if (a === 0) ctx.moveTo(px, py);
         else ctx.lineTo(px, py);
       }
@@ -819,7 +834,11 @@ const UI = {
       d.missionDesc.innerText = isZh ? q.descZh : q.descEn;
       const progressPct = Math.min((q.currentProgress / q.targetDuration) * 100, 100);
       d.missionProgressBar.style.width = `${progressPct}%`;
-      d.missionPctLabel.innerText = `${Math.floor(progressPct)}%`;
+      
+      const isSatisfied = q.check(st);
+      d.missionPctLabel.innerText = isSatisfied ? `⚡ ${Math.floor(progressPct)}%` : `⏳ ${Math.floor(progressPct)}%`;
+      d.missionPctLabel.style.color = isSatisfied ? '#4ade80' : '#f59e0b';
+
       const elapsed = Math.floor(DynamicMissionEngine.timer);
       const mins = Math.floor(elapsed / 60).toString().padStart(2, '0');
       const secs = Math.floor(elapsed % 60).toString().padStart(2, '0');
