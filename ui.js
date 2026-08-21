@@ -1,5 +1,5 @@
 // =========================================================================
-// J.A.R. 聚變核心 3D - 100% 全雙語介面與證書系統 (ui.js v15.2 Gold)
+// J.A.R. 聚變核心 3D - 100% 全雙語介面與證書系統 (ui.js v15.3 Ultimate Clean)
 // =========================================================================
 
 const I18N = {
@@ -146,8 +146,7 @@ const I18N = {
     }
     this.updateDropdownOptions(dom);
     CareerManager.updateRank();
-    
-    // 即時刷新頂部官銜與統計
+
     if (dom && dom.careerRank) {
       const isZh = this.currentLang === 'zh';
       dom.careerRank.innerText = isZh ? CareerManager.data.rankZh : CareerManager.data.rankEn;
@@ -155,7 +154,6 @@ const I18N = {
       dom.careerStat.innerText = `Q_max: ${CareerManager.data.maxQ.toFixed(2)} | ${surviveLabel}: ${Math.floor(CareerManager.data.totalSurvivalSeconds)}s`;
     }
 
-    // 強制即時同步任務名稱與描述
     const q = DynamicMissionEngine.currentQuest;
     if (q && dom && dom.missionName) {
       const isZh = this.currentLang === 'zh';
@@ -293,10 +291,17 @@ const UI = {
       };
     }
 
+    // 精簡視圖切換：連同左右側面板一併收起
     if (this.dom.btnHudToggle) {
       this.dom.btnHudToggle.onclick = () => {
         this.isHudHidden = !this.isHudHidden;
         this.dom.hudArea.style.display = this.isHudHidden ? 'none' : 'grid';
+
+        const fluxMon = document.getElementById('flux-monitor');
+        const missionHud = document.getElementById('mission-hud');
+        if (fluxMon) fluxMon.style.display = this.isHudHidden ? 'none' : 'flex';
+        if (missionHud) missionHud.style.display = this.isHudHidden ? 'none' : 'block';
+
         if (this.dom.lblHudToggle) {
           this.dom.lblHudToggle.innerText = this.isHudHidden ? I18N.t('showHud') : I18N.t('hideHud');
         }
@@ -747,7 +752,6 @@ const UI = {
     const cy = h / 2 - (deltaZ * 25.0);
     const numSurfaces = 6;
 
-    // 動態磁力線縮放響應
     const currentIp = FusionPhysics.state.plasmaCurrent;
     const currentBt = FusionPhysics.state.magField;
     const dynamicKappa = kappa * (1.0 + (currentIp - 1.2) * 0.12);
@@ -834,7 +838,7 @@ const UI = {
       d.missionDesc.innerText = isZh ? q.descZh : q.descEn;
       const progressPct = Math.min((q.currentProgress / q.targetDuration) * 100, 100);
       d.missionProgressBar.style.width = `${progressPct}%`;
-      
+
       const isSatisfied = q.check(st);
       d.missionPctLabel.innerText = isSatisfied ? `⚡ ${Math.floor(progressPct)}%` : `⏳ ${Math.floor(progressPct)}%`;
       d.missionPctLabel.style.color = isSatisfied ? '#4ade80' : '#f59e0b';
