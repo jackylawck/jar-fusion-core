@@ -1,9 +1,9 @@
 // =========================================================================
-// J.A.R. 聚變核心 3D - 1.5D 數位孿生與 ITER 級物理整合引擎 (physics.js v8.2)
+// J.A.R. 聚變核心 3D - 物理與控制求解器 (physics.js v8.3)
 // =========================================================================
 
 const COILS_COUNT = 10;
-const RADIAL_GRIDS = 25; // 0..20: 核心區 (rho ∈ [0, 1.0]), 21..24: 1D SOL (rho ∈ (1.0, 1.15])
+const RADIAL_GRIDS = 25;
 const CORE_GRIDS = 21;
 
 const TOKAMAK_GEO = {
@@ -53,6 +53,8 @@ function solveTridiagonal(A, B, C, D, N) {
 }
 
 const FusionPhysics = {
+  isAdvancedMode: false, // 🟢 預設為簡易穩定模式 (易維持 Q>1, 必穩定不易爆裂)
+
   grid: {
     rho: new Float32Array(RADIAL_GRIDS),
     Te: new Float32Array(RADIAL_GRIDS),
@@ -73,7 +75,6 @@ const FusionPhysics = {
       const lambda_wall = 1.0 / TOKAMAK_GEO.tauWall;
       const omega_c = Math.max(lambda_unstable * 2.2, 16.0);
       const zeta = 0.707;
-
       const inertiaFactor = 1.0 / Math.max(Ip_MA, 0.4);
       this.Kp = Math.min(Math.max((Math.pow(omega_c, 2) + lambda_unstable * lambda_wall) * inertiaFactor * 0.15, 14.0), 80.0);
       this.Kd = Math.min(Math.max((2 * zeta * omega_c + lambda_wall - lambda_unstable) * inertiaFactor * 0.18, 4.0), 22.0);
@@ -81,14 +82,14 @@ const FusionPhysics = {
   },
 
   state: {
-    isOnline: false, // 🟢 預設開局待機，不運算物理，先讓玩家欣賞 3D 特效
-    tempE0: 0.8,     // 初始安全低溫 (0.8 keV)
+    isOnline: false,
+    tempE0: 0.8,
     tempI0: 0.8,
     density0: 0.5,
     magField: 6.0,
     plasmaCurrent: 1.2,
 
-    heatECRH: 0.0,   // 預設關閉加熱
+    heatECRH: 0.0,
     heatNBI: 0.0,
 
     q95: 3.5,
@@ -150,11 +151,16 @@ const FusionPhysics = {
   togglePower() {
     this.state.isOnline = !this.state.isOnline;
     if (this.state.isOnline) {
-      this.state.heatECRH = 10.0;
-      this.state.heatNBI = 10.0;
+      this.state.heatECRH = 12.0;
+      this.state.heatNBI = 12.0;
       this.state.density0 = 1.2;
     }
     return this.state.isOnline;
+  },
+
+  toggleMode() {
+    this.isAdvancedMode = !this.isAdvancedMode;
+    return this.isAdvancedMode;
   },
 
   solve1DTransportCN(dt) {
@@ -178,8 +184,7 @@ const FusionPhysics = {
     const chi_edge = chi_edge_nominal / Math.max(s.pedestalRecoveryFactor, 0.2);
     const chi_sol = 2.4 * turbMod;
 
-    // 偏濾器熱流通量安全箝位
-    const pSol_MW = Math.max(Math.min(pTotalHeat * 0.45, 80.0), 0.5);
+    const pSol_MW = Math.max(Math.min(pTotalHeat * 0.45, 60.0), 0.5);
     const bEff = Math.min(Math.max(s.magField, 1.2), 6.5);
     s.lambdaQ_mm = 0.63 * Math.pow(bEff, -0.77) * Math.pow(pSol_MW, 0.09) * 1e3;
 
@@ -209,7 +214,10 @@ const FusionPhysics = {
         const sigV = getBoschHaleSigmaV(Ti);
         const dVol = 4.0 * Math.PI * Math.PI * geo.R0 * Math.pow(geo.a, 2) * geo.kappa * (r === 0 ? 0.25 * dr : r) * dr;
         const pFus_density = 0.25 * Math.pow(n_SI, 2) * sigV * E_fus_J;
-        pAlpha_local = Math.min((pFus_density * 0.2) / 1e6, 50.0);
+        
+        // 簡易模式下對 Alpha 自加熱進行穩定阻尼，防止失控
+        const maxAlphaCap = this.isAdvancedMode ? 35.0 : 18.0;
+        pAlpha_local = Math.min((pFus_density * 0.2) / 1e6, maxAlphaCap);
         totalFusionPower_W += pFus_density * dVol;
       }
 
@@ -277,10 +285,11 @@ const FusionPhysics = {
     const nextTe = solveTridiagonal(A_e, B_e, C_e, D_e, N);
     const nextTi = solveTridiagonal(A_i, B_i, C_i, D_i, N);
 
+    const tempLimit = this.isAdvancedMode ? 55.0 : 32.0; // 簡易模式下限制最高溫
     for (let i = 0; i < N; i++) {
-      g.Te[i] = Math.min(Math.max(nextTe[i], 0.015), 60.0);
-      g.Ti[i] = Math.min(Math.max(nextTi[i], 0.015), 60.0);
-      const solDecay = (i >= CORE_GRIDS) ? 0.08 : 0.018;
+      g.Te[i] = Math.min(Math.max(nextTe[i], 0.015), tempLimit);
+      g.Ti[i] = Math.min(Math.max(nextTi[i], 0.015), tempLimit);
+      const solDecay = (i >= CORE_GRIDS) ? 0.08 : 0.015;
       g.n[i] = Math.max(g.n[i] - solDecay * g.n[i] * dt, 0.02);
     }
 
@@ -306,7 +315,7 @@ const FusionPhysics = {
         const dist = Math.abs(r - s.resRadius);
         if (dist < s.magneticIslandWidth * 0.5) {
           baseQ = 2.0;
-          g.Te[i] *= (1.0 - 0.28 * (s.magneticIslandWidth - dist));
+          g.Te[i] *= (1.0 - 0.25 * (s.magneticIslandWidth - dist));
         }
       }
       g.qProfile[i] = baseQ;
@@ -318,34 +327,34 @@ const FusionPhysics = {
 
     const shear_res = Math.max(g.magneticShear[resIndex], 0.08);
     const gradP_res = (g.n[resIndex + 1] * g.Te[resIndex + 1] - g.n[resIndex - 1] * g.Te[resIndex - 1]) / (2 * dr);
-    const vdeDestabilization = Math.pow(s.deltaZ / 0.4, 2) * 3.5;
+    const vdeDestabilization = Math.pow(s.deltaZ / 0.4, 2) * (this.isAdvancedMode ? 3.5 : 1.2);
 
     const deltaPrime = -4.0 / Math.max(s.resRadius, 0.2) + Math.abs(gradP_res) / (shear_res * 1.4) + vdeDestabilization + (s.q95 < 2.0 ? 6.0 : 0.0);
 
-    const dw_dt = 0.16 * (deltaPrime + (s.betaN * 0.9) / Math.max(s.magneticIslandWidth, 0.04));
+    const dw_dt = 0.16 * (deltaPrime + (s.betaN * (this.isAdvancedMode ? 0.9 : 0.4)) / Math.max(s.magneticIslandWidth, 0.04));
     s.magneticIslandWidth = Math.max(0, Math.min(s.magneticIslandWidth + dw_dt * dt, 1.25));
     s.kinkDistortion = s.magneticIslandWidth;
 
-    if (s.magneticIslandWidth > 0.65 && s.failingCoilIndex === -1) {
+    if (s.magneticIslandWidth > 0.75 && s.failingCoilIndex === -1) {
       s.failingCoilIndex = Math.floor(Math.random() * COILS_COUNT);
     }
 
     s.pedestalPressure = g.n[CORE_GRIDS - 3] * (g.Te[CORE_GRIDS - 3] + g.Ti[CORE_GRIDS - 3]);
     s.elmBurst = false;
     if (s.isHMode && s.pedestalRecoveryFactor >= 0.95) {
-      if (s.pedestalPressure > 4.4) {
+      if (s.pedestalPressure > 4.6) {
         s.elmBurst = true;
-        s.pedestalRecoveryFactor = 0.25;
+        s.pedestalRecoveryFactor = 0.35;
         for (let i = CORE_GRIDS - 6; i < CORE_GRIDS; i++) {
-          g.Te[i] *= 0.65;
-          g.Ti[i] *= 0.65;
-          g.n[i] *= 0.70;
+          g.Te[i] *= 0.72;
+          g.Ti[i] *= 0.72;
+          g.n[i] *= 0.78;
         }
       }
     }
 
     const decayIndex = (geo.kappa - 1.0) * 1.8;
-    const rawGrowth = (s.betaN > 2.5 || s.kinkDistortion > 0.4) ? decayIndex * 4.5 : -3.0;
+    const rawGrowth = (s.betaN > 2.8 || s.kinkDistortion > 0.4) ? decayIndex * (this.isAdvancedMode ? 4.5 : 2.0) : -3.0;
     s.vdeGrowthRate = rawGrowth / (1.0 + geo.tauWall * Math.abs(rawGrowth));
 
     this.vdeController.tuneLinearizedGains(Math.max(rawGrowth, 2.0), s.plasmaCurrent);
@@ -357,36 +366,38 @@ const FusionPhysics = {
     s.vdeFeedbackForce = Math.min(Math.max(controlSignal, -this.vdeController.maxControlVolt), this.vdeController.maxControlVolt);
 
     if (s.vdeGrowthRate > 0) {
-      const netGrowth = Math.max(0.012 * Math.exp(s.vdeGrowthRate * dt) - s.vdeFeedbackForce * 0.009 * dt, -0.25 * dt);
+      const netGrowth = Math.max(0.01 * Math.exp(s.vdeGrowthRate * dt) - s.vdeFeedbackForce * 0.01 * dt, -0.3 * dt);
       s.deltaZ = Math.max(0, Math.min(s.deltaZ + netGrowth, 1.2));
     } else {
-      s.deltaZ = Math.max(0, s.deltaZ - (1.8 + s.vdeFeedbackForce * 0.06) * dt);
+      s.deltaZ = Math.max(0, s.deltaZ - (2.0 + s.vdeFeedbackForce * 0.08) * dt);
     }
   },
 
   update(dt) {
-    // 🟢 安全待機防護：未開機前不扣血、不計算物理
     if (!this.state.isOnline || this.state.gameOver) return;
 
     this.solve1DTransportCN(dt);
     const s = this.state;
 
+    // 損傷倍率：簡易模式下大幅降低，提供極佳容錯率
+    const dmgScale = this.isAdvancedMode ? 1.0 : 0.35;
+
     let activeDamage = 0;
-    if (s.kinkDistortion > 0.3) activeDamage += s.kinkDistortion * 22.0;
-    if (s.elmBurst) activeDamage += 9.5;
-    if (s.deltaZ > 0.35) activeDamage += s.deltaZ * 48.0;
-    if (s.peakDivertorHeatFlux_MW_m2 > 12.0) activeDamage += (s.peakDivertorHeatFlux_MW_m2 - 12.0) * 2.8;
-    if (s.tempE0 > 24.0 || s.tempI0 > 24.0) activeDamage += (Math.max(s.tempE0, s.tempI0) - 24.0) * 4.0;
-    if (s.greenwaldRatio > 1.0) activeDamage += (s.greenwaldRatio - 1.0) * 35.0;
+    if (s.kinkDistortion > 0.35) activeDamage += s.kinkDistortion * 18.0 * dmgScale;
+    if (s.elmBurst) activeDamage += 6.5 * dmgScale;
+    if (s.deltaZ > 0.38) activeDamage += s.deltaZ * 35.0 * dmgScale;
+    if (s.peakDivertorHeatFlux_MW_m2 > 14.0) activeDamage += (s.peakDivertorHeatFlux_MW_m2 - 14.0) * 2.0 * dmgScale;
+    if (s.tempE0 > 28.0 || s.tempI0 > 28.0) activeDamage += (Math.max(s.tempE0, s.tempI0) - 28.0) * 3.0 * dmgScale;
+    if (s.greenwaldRatio > 1.05) activeDamage += (s.greenwaldRatio - 1.05) * 25.0 * dmgScale;
 
     if (activeDamage > 0) {
       const deltaDmg = activeDamage * dt;
       s.integrity = Math.max(s.integrity - deltaDmg, 0);
-      s.maxIntegrity = Math.max(s.maxIntegrity - deltaDmg * 0.10, 0);
+      s.maxIntegrity = Math.max(s.maxIntegrity - deltaDmg * 0.05, 0);
       s.integrity = Math.min(s.integrity, s.maxIntegrity);
       if (s.integrity <= 0) s.gameOver = true;
     } else {
-      s.integrity = Math.min(s.integrity + 1.2 * dt, s.maxIntegrity);
+      s.integrity = Math.min(s.integrity + 2.0 * dt, s.maxIntegrity);
     }
   },
 
@@ -394,18 +405,18 @@ const FusionPhysics = {
     const g = this.grid;
     for (let i = 0; i < CORE_GRIDS; i++) {
       const r = g.rho[i];
-      const deposition = 0.55 * Math.exp(-Math.pow((r - 0.4) / 0.18, 2));
-      g.n[i] = Math.min(g.n[i] + deposition, 3.8);
-      g.Te[i] = Math.max(g.Te[i] * (1.0 - deposition * 0.28), 0.15);
-      g.Ti[i] = Math.max(g.Ti[i] * (1.0 - deposition * 0.25), 0.15);
+      const deposition = 0.45 * Math.exp(-Math.pow((r - 0.4) / 0.18, 2));
+      g.n[i] = Math.min(g.n[i] + deposition, 3.5);
+      g.Te[i] = Math.max(g.Te[i] * (1.0 - deposition * 0.22), 0.15);
+      g.Ti[i] = Math.max(g.Ti[i] * (1.0 - deposition * 0.20), 0.15);
     }
   },
 
   purgeDivertor() {
     const g = this.grid;
     for (let i = 0; i < RADIAL_GRIDS; i++) {
-      g.Te[i] = Math.max(g.Te[i] * 0.75, 0.015);
-      g.Ti[i] = Math.max(g.Ti[i] * 0.75, 0.015);
+      g.Te[i] = Math.max(g.Te[i] * 0.80, 0.015);
+      g.Ti[i] = Math.max(g.Ti[i] * 0.80, 0.015);
     }
   },
 
@@ -421,17 +432,11 @@ const FusionPhysics = {
     this.state.stlTurbulenceMod = complexityFactor;
     TOKAMAK_GEO.impurityFrac = 0.025 * Math.sqrt(complexityFactor);
 
-    const rating = complexityFactor < 0.9 ? 'S (流線低湍流)' : complexityFactor < 1.4 ? 'A (標準幾何)' : 'C (高湍流粗糙體)';
-    const advice = complexityFactor > 1.3
-      ? '模型稜角增加了 1D 邊界熱擴散與壁面雜質脫附，建議降低加熱功率或提升環向磁場 B_T。'
-      : '幾何對稱度極高，等離子體流動阻力低，能量約束時間 tau_E 獲得小幅增益。';
-
     return {
       triangleCount,
       complexityFactor: complexityFactor.toFixed(2),
-      rating,
-      advice,
-      transportPenalty: `+${((complexityFactor - 1.0) * 25).toFixed(0)}% 熱擴散`
+      rating: complexityFactor < 0.9 ? 'S' : complexityFactor < 1.4 ? 'A' : 'C',
+      transportPenalty: `+${((complexityFactor - 1.0) * 25).toFixed(0)}%`
     };
   }
 };
