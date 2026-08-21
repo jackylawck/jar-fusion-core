@@ -8,32 +8,27 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="theme-color" content="#020617">
 
-  <!-- 🔍 Google 網站管理員驗證 -->
   <meta name="google-site-verification" content="JZ5UohX-CcP_fQV0_DI9VadkKY4ZoTTkUifL88-fIcY" />
 
-  <!-- 🌐 國際與雙語 SEO 標籤 -->
   <title>⚛️ J.A.R. 聚變核心 3D | JAR Fusion Core - 1.5D Tokamak Simulator</title>
-  <meta name="description" content="J.A.R. Fusion Core 3D is a research-grade WebGL Tokamak Nuclear Fusion Simulator featuring 1.5D Crank-Nicolson transport, Bosch-Hale cross-section, Rutherford magnetic island dynamics, adaptive VDE PD control, and custom 3D printing STL core integration. 依據真實等離子體物理與 ITER 標度律打造的 3D 托卡馬克核聚變反應堆模擬器。">
-  <meta name="keywords" content="JarFusionCore, Fusion Reactor, Tokamak Simulator, 3D Fusion Core, Plasma Physics, Three.js, WebGL, Crank-Nicolson, Bosch-Hale, ITER, DIII-D, 3D Printing STL, Nuclear Fusion, 托卡馬克, 核融合, 等離子體物理, 聚變核心, 1.5D輸運, 磁約束, 3D打印聚變堆">
+  <meta name="description" content="J.A.R. Fusion Core 3D is a research-grade WebGL Tokamak Nuclear Fusion Simulator.">
+  <meta name="keywords" content="JarFusionCore, Fusion Reactor, Tokamak Simulator, 3D Fusion Core, Plasma Physics, Three.js, WebGL">
   <meta name="author" content="羅子淇 Jacky Law">
   <meta name="robots" content="index, follow">
   <link rel="canonical" href="https://jackylawck.github.io/jar-fusion-core/">
 
-  <!-- 📱 全球社群分享 Open Graph -->
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://jackylawck.github.io/jar-fusion-core/">
   <meta property="og:title" content="⚛️ J.A.R. 聚變核心 3D | JAR Fusion Core">
-  <meta property="og:description" content="High-fidelity 1.5D Tokamak Fusion Reactor Simulator in WebGL (Three.js + Crank-Nicolson + PWA).">
+  <meta property="og:description" content="High-fidelity 1.5D Tokamak Fusion Reactor Simulator in WebGL.">
   <meta property="og:image" content="https://jackylawck.github.io/jar-fusion-core/jarfusioncore512icon.png">
 
-  <!-- 🐦 Twitter Card 標籤 -->
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:url" content="https://jackylawck.github.io/jar-fusion-core/">
   <meta name="twitter:title" content="⚛️ JAR Fusion Core 3D | Tokamak Plasma Simulator">
-  <meta name="twitter:description" content="Experience real-time burning plasma, Eich-scaling SOL divertor, magnetic island stabilization and 3D print STL thermal mapping.">
+  <meta name="twitter:description" content="Experience real-time burning plasma, Eich-scaling SOL divertor and 3D print STL thermal mapping.">
   <meta name="twitter:image" content="https://jackylawck.github.io/jar-fusion-core/jarfusioncore512icon.png">
 
-  <!-- 🔍 Google 結構化資料 (Schema.org JSON-LD) -->
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
@@ -41,24 +36,14 @@
     "name": "J.A.R. Fusion Core 3D",
     "alternateName": "J.A.R. 聚變核心 3D",
     "url": "https://jackylawck.github.io/jar-fusion-core/",
-    "description": "A research-grade WebGL Tokamak Nuclear Fusion Simulator built with Three.js, 1.5D Crank-Nicolson transport, Bosch-Hale reaction rate, Eich-scaling SOL, adaptive VDE pole-placement PD control, and custom 3D printing STL models.",
+    "description": "A research-grade WebGL Tokamak Nuclear Fusion Simulator.",
     "applicationCategory": "EducationalApplication, SimulationApplication",
     "operatingSystem": "All",
     "browserRequirements": "Requires JavaScript. Requires WebGL / HTML5.",
-    "inLanguage": ["en", "zh-HK", "zh-TW"],
-    "offers": {
-      "@type": "Offer",
-      "price": "0",
-      "priceCurrency": "USD"
-    },
-    "author": {
-      "@type": "Person",
-      "name": "Jacky Law"
-    }
+    "inLanguage": ["en", "zh-HK", "zh-TW"]
   }
   </script>
 
-  <!-- PWA 與圖標支援 -->
   <link rel="manifest" href="manifest.json">
   <link rel="icon" type="image/png" sizes="192x192" href="./jarfusioncore192icon.png">
   <link rel="icon" type="image/png" sizes="512x512" href="./jarfusioncore512icon.png">
@@ -67,7 +52,6 @@
 
   <link rel="stylesheet" href="style.css">
 
-  <!-- Three.js 與後處理組件 -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/STLLoader.js"></script>
@@ -84,7 +68,6 @@
   <div id="atmosphere-glow"></div>
   <div id="scanlines"></div>
 
-  <!-- 維修長按 HUD 環 -->
   <div id="repair-hud" class="hidden">
     <svg class="progress-ring" width="90" height="90">
       <circle class="progress-ring__circle-bg" stroke="#1e293b" stroke-width="6" fill="transparent" r="36" cx="45" cy="45"/>
@@ -111,15 +94,18 @@
           <span class="career-title" id="career-rank">實習操作員</span>
           <span class="career-stat" id="career-stat">Q_max: 0.00 | 存活: 0s</span>
         </div>
-        <button id="btn-lang-toggle" class="btn-lang">English</button>
+        <!-- 難度模式切換 (簡易穩定 vs 進階科研) -->
+        <button id="btn-mode-toggle" class="btn-top-util">🟢 <span data-i18n="modeStandard">標準模式</span></button>
+        <button id="btn-lang-toggle" class="btn-top-util">English</button>
+        <button id="btn-hud-toggle" class="btn-top-util">👁️ <span data-i18n="hideHud">精簡視圖</span></button>
       </div>
       <div id="alert-msg"></div>
     </div>
 
-    <!-- 右上角任務目標 HUD -->
+    <!-- 右上角任務 HUD -->
     <div id="mission-hud">
       <div class="mission-header">
-        <span class="mission-tag">MISSION ACTIVE</span>
+        <span class="mission-tag" data-i18n="missionActive">MISSION ACTIVE</span>
         <span id="mission-timer">00:45</span>
       </div>
       <div class="mission-name" id="mission-name">階段任務：核心電離預熱</div>
@@ -136,61 +122,63 @@
       <div class="monitor-foot" id="flux-info">κ: 1.75 | δZ: 0.00m</div>
     </div>
 
-    <!-- 中部 3A 級 3+1 HUD -->
-    <div id="hud">
-      <div class="hud-card hud-card-core">
-        <div class="hud-title" data-i18n="dualTemp">雙溫分離 (Te / Ti)</div>
-        <div class="hud-val-large">
-          <span class="temp-e" id="val-te">0.8</span><span class="temp-slash">/</span><span class="temp-i" id="val-ti">0.8</span> <span class="hud-unit">keV</span>
+    <!-- 底部整合控制區 (HUD 下沉貼底，不擋中間視角) -->
+    <div id="bottom-dock">
+      <!-- 核心 4 卡片 HUD (貼齊底部控制台) -->
+      <div id="hud">
+        <div class="hud-card hud-card-core">
+          <div class="hud-title" data-i18n="dualTemp">雙溫分離 (Te / Ti)</div>
+          <div class="hud-val-large">
+            <span class="temp-e" id="val-te">0.8</span><span class="temp-slash">/</span><span class="temp-i" id="val-ti">0.8</span> <span class="hud-unit">keV</span>
+          </div>
+        </div>
+
+        <div class="hud-card hud-card-core" id="card-q">
+          <div class="hud-title" data-i18n="energyGain">聚變能量增益 Q</div>
+          <div class="hud-val-large" id="val-q">0.00</div>
+        </div>
+
+        <div class="hud-card hud-card-core">
+          <div class="hud-title" data-i18n="safetyFactor">安全因子 q₉₅ / 歸一化 β_N</div>
+          <div class="hud-val-mid" id="val-q95-beta">q: 3.50 | β: 0.2</div>
+        </div>
+
+        <div class="hud-card hud-card-sub">
+          <div class="hud-title" data-i18n="solHeatLabel">SOL 靶板熱流 / 密度極限</div>
+          <div class="hud-val-sub" id="val-div-heat">0.0 MW/m²</div>
         </div>
       </div>
 
-      <div class="hud-card hud-card-core" id="card-q">
-        <div class="hud-title" data-i18n="energyGain">聚變能量增益 Q</div>
-        <div class="hud-val-large" id="val-q">0.00</div>
-      </div>
-
-      <div class="hud-card hud-card-core">
-        <div class="hud-title" data-i18n="safetyFactor">安全因子 q₉₅ / 歸一化 β_N</div>
-        <div class="hud-val-mid" id="val-q95-beta">q: 3.50 | β: 0.2</div>
-      </div>
-
-      <div class="hud-card hud-card-sub">
-        <div class="hud-title">SOL 靶板熱流 / 密度極限</div>
-        <div class="hud-val-sub" id="val-div-heat">0.0 MW/m²</div>
-      </div>
-    </div>
-
-    <!-- 底部控制面板 -->
-    <div id="controls-panel">
-      <div class="control-group">
-        <label><span data-i18n="ecrhPower">微波加熱 P_ECRH (→Te)</span>: <span id="label-heat-ecrh">0.0 MW</span></label>
-        <input type="range" id="slider-heat-ecrh" min="0" max="40" step="0.5" value="0">
-      </div>
-      <div class="control-group">
-        <label><span data-i18n="nbiPower">中性束注入 P_NBI (→Ti)</span>: <span id="label-heat-nbi">0.0 MW</span></label>
-        <input type="range" id="slider-heat-nbi" min="0" max="40" step="0.5" value="0">
-      </div>
-      <div class="control-group">
-        <label><span data-i18n="toroidalField">環向磁場 B_T</span>: <span id="label-mag">6.0 T</span></label>
-        <input type="range" id="slider-mag" min="2" max="15" step="0.2" value="6">
-      </div>
-      <div class="control-group">
-        <label><span data-i18n="plasmaCurrent">等離子體電流 I_p</span>: <span id="label-ip">1.2 MA</span></label>
-        <input type="range" id="slider-ip" min="0.4" max="3.0" step="0.1" value="1.2">
-      </div>
-      <div class="btn-row">
-        <!-- 🟢 核心安全待機/開機開關 -->
-        <button class="btn-power" id="btn-power">🟢 系統主電源：待機中</button>
-        <button class="btn-fuel" id="btn-fuel" data-i18n="injectFuel">注入 D-T 燃料顆粒</button>
-        <button class="btn-divertor" id="btn-cool" data-i18n="divertorPurge">開啟偏濾器排熱</button>
-        <button class="btn-stl" id="btn-load-stl">📁 載入 3D 打印 STL 核心</button>
-        <input type="file" id="stl-file-input" accept=".stl" style="display:none;">
+      <!-- 控制面板 -->
+      <div id="controls-panel">
+        <div class="control-group">
+          <label><span data-i18n="ecrhPower">微波加熱 P_ECRH (→Te)</span>: <span id="label-heat-ecrh">0.0 MW</span></label>
+          <input type="range" id="slider-heat-ecrh" min="0" max="40" step="0.5" value="0">
+        </div>
+        <div class="control-group">
+          <label><span data-i18n="nbiPower">中性束注入 P_NBI (→Ti)</span>: <span id="label-heat-nbi">0.0 MW</span></label>
+          <input type="range" id="slider-heat-nbi" min="0" max="40" step="0.5" value="0">
+        </div>
+        <div class="control-group">
+          <label><span data-i18n="toroidalField">環向磁場 B_T</span>: <span id="label-mag">6.0 T</span></label>
+          <input type="range" id="slider-mag" min="2" max="15" step="0.2" value="6">
+        </div>
+        <div class="control-group">
+          <label><span data-i18n="plasmaCurrent">等離子體電流 I_p</span>: <span id="label-ip">1.2 MA</span></label>
+          <input type="range" id="slider-ip" min="0.4" max="3.0" step="0.1" value="1.2">
+        </div>
+        <div class="btn-row">
+          <button class="btn-power" id="btn-power" data-i18n="powerStandby">🟢 系統主電源：待機中</button>
+          <button class="btn-fuel" id="btn-fuel" data-i18n="injectFuel">注入 D-T 燃料顆粒</button>
+          <button class="btn-divertor" id="btn-cool" data-i18n="divertorPurge">開啟偏濾器排熱</button>
+          <button class="btn-stl" id="btn-load-stl" data-i18n="loadStl">📁 載入 3D 打印 STL 核心</button>
+          <input type="file" id="stl-file-input" accept=".stl" style="display:none;">
+        </div>
       </div>
     </div>
   </div>
 
-  <!-- 事故歸因報告 (含黑盒子回放) -->
+  <!-- 事故歸因報告 (全英/雙語支援) -->
   <div id="incident-modal" class="modal-overlay hidden">
     <div class="modal-card">
       <div class="modal-header">
@@ -203,13 +191,13 @@
           <div class="report-value" id="report-cause">Troyon β_N 磁流體壓力極限突破</div>
         </div>
         <div class="report-grid">
-          <div class="grid-item"><span>突破時 Q 值</span><b id="report-q">1.24</b></div>
-          <div class="grid-item"><span>等離子體溫度</span><b id="report-temp">28.4 keV</b></div>
-          <div class="grid-item"><span>安全因子 q95</span><b id="report-q95">1.82</b></div>
-          <div class="grid-item"><span>密度比 n/nG</span><b id="report-greenwald">1.12</b></div>
+          <div class="grid-item"><span data-i18n="reportQ">突破時 Q 值</span><b id="report-q">1.24</b></div>
+          <div class="grid-item"><span data-i18n="reportTemp">等離子體溫度</span><b id="report-temp">28.4 keV</b></div>
+          <div class="grid-item"><span data-i18n="reportQ95">安全因子 q95</span><b id="report-q95">1.82</b></div>
+          <div class="grid-item"><span data-i18n="reportGreenwald">密度比 n/nG</span><b id="report-greenwald">1.12</b></div>
         </div>
         <div class="report-section">
-          <div class="report-label">破裂前 5 秒黑盒子時序回放 (Telemetry History)</div>
+          <div class="report-label" data-i18n="telemetryTitle">破裂前 5 秒黑盒子時序回放 (TELEMETRY HISTORY)</div>
           <canvas id="telemetryCanvas" width="440" height="110"></canvas>
         </div>
         <div class="report-section advice-box">
@@ -217,7 +205,7 @@
           <div class="report-advice" id="report-advice">下次提高加熱功率前，請優先提高環向磁場 B_T 或適度進行偏濾器排氣。</div>
         </div>
       </div>
-      <button class="btn-restart" id="btn-restart" data-i18n="restartCore">重啟反應爐循環</button>
+      <button class="btn-restart" id="btn-restart" data-i18n="restartCore">重啟反應爐 (回到待機)</button>
     </div>
   </div>
 
@@ -226,15 +214,15 @@
     <div class="modal-card victory-card">
       <div class="modal-header">
         <span class="modal-icon">⚡</span>
-        <span class="modal-title">任務圓滿達成 (MISSION SUCCESS)</span>
+        <span class="modal-title" data-i18n="victoryTitle">任務圓滿達成 (MISSION SUCCESS)</span>
       </div>
       <div class="modal-body">
-        <p id="victory-text">深空基地電網已成功接入聚變核心，能量輸出穩定！</p>
+        <p id="victory-text" data-i18n="victoryDesc">深空基地電網已成功接入聚變核心，能量輸出穩定！</p>
         <div class="victory-unlock">
-          <span>解鎖階級：</span><b id="victory-rank">托卡馬克資深工程師</b>
+          <span data-i18n="unlockRank">解鎖階級：</span><b id="victory-rank">托卡馬克資深工程師</b>
         </div>
       </div>
-      <button class="btn-next-mission" id="btn-next-mission">進入下一階段挑戰</button>
+      <button class="btn-next-mission" id="btn-next-mission" data-i18n="nextMission">進入下一階段挑戰</button>
     </div>
   </div>
 
