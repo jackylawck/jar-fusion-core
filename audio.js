@@ -8,15 +8,13 @@ class SoundDirector {
     this.isIgnited = false;
     this.lastAlertTime = 0;
 
-    // 總線架構 (Audio Buses)
     this.masterBus = null;
-    this.bgBus = null;          // 背景層 (嗡鳴、熱噪聲、諧振)
-    this.sfxBus = null;         // 效果層 (警報、焊接、操作)
-    this.reverbConvolver = null;// 托卡馬克金屬腔體卷積器
+    this.bgBus = null;
+    this.sfxBus = null;
+    this.reverbConvolver = null;
     this.reverbWetGain = null;
     this.masterCompressor = null;
 
-    // 音源節點
     this.humOsc = null;
     this.humGain = null;
     this.noiseNode = null;
@@ -32,7 +30,6 @@ class SoundDirector {
     this.listener = this.ctx.listener;
     const t = this.ctx.currentTime;
 
-    // 1. 主壓縮器 (Master Glue Compressor) - 塑造動態層次
     this.masterCompressor = this.ctx.createDynamicsCompressor();
     this.masterCompressor.threshold.setValueAtTime(-16, t);
     this.masterCompressor.knee.setValueAtTime(6, t);
@@ -41,33 +38,27 @@ class SoundDirector {
     this.masterCompressor.release.setValueAtTime(0.2, t);
     this.masterCompressor.connect(this.ctx.destination);
 
-    // 2. 主混音匯流排 (Master Bus)
     this.masterBus = this.ctx.createGain();
     this.masterBus.gain.setValueAtTime(0.9, t);
     this.masterBus.connect(this.masterCompressor);
 
-    // 3. 金屬腔體卷積混響 (Tokamak Metallic Chamber Reverb)
     this.reverbConvolver = this.ctx.createConvolver();
-    this.reverbConvolver.buffer = this.buildMetallicIR(1.4, 0.22); // 1.4秒金屬漫反射脈衝
+    this.reverbConvolver.buffer = this.buildMetallicIR(1.4, 0.22);
     this.reverbWetGain = this.ctx.createGain();
-    this.reverbWetGain.gain.setValueAtTime(0.28, t); // 28% 空間濕訊號
+    this.reverbWetGain.gain.setValueAtTime(0.28, t);
     this.reverbConvolver.connect(this.reverbWetGain);
     this.reverbWetGain.connect(this.masterBus);
 
-    // 4. 背景音軌匯流排 (支援側鏈閃避 Sidechain Bus)
     this.bgBus = this.ctx.createGain();
     this.bgBus.gain.setValueAtTime(1.0, t);
     this.bgBus.connect(this.masterBus);
 
-    // 5. 實效與警報匯流排 (SFX Bus -> 同時送入乾聲與混響)
     this.sfxBus = this.ctx.createGain();
     this.sfxBus.gain.setValueAtTime(1.0, t);
     this.sfxBus.connect(this.masterBus);
     this.sfxBus.connect(this.reverbConvolver);
 
-    // --- 構建背景音軌 ---
-
-    // A. 低頻磁約束嗡鳴 (40~80Hz)
+    // 1. 低頻磁約束嗡鳴 (40~80Hz)
     this.humOsc = this.ctx.createOscillator();
     this.humGain = this.ctx.createGain();
     this.humOsc.type = 'triangle';
@@ -77,7 +68,7 @@ class SoundDirector {
     this.humGain.connect(this.bgBus);
     this.humOsc.start();
 
-    // B. 高溫等離子體粉紅噪音 (Plasma Pink Noise)
+    // 2. 高溫等離子體粉紅噪音
     const bufferSize = this.ctx.sampleRate * 2;
     const noiseBuffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
     const output = noiseBuffer.getChannelData(0);
@@ -109,7 +100,7 @@ class SoundDirector {
     this.noiseGain.connect(this.bgBus);
     this.noiseNode.start();
 
-    // C. 高頻環向諧振 (Sine Wave)
+    // 3. 高頻環向諧振
     this.highResOsc = this.ctx.createOscillator();
     this.highResGain = this.ctx.createGain();
     this.highResOsc.type = 'sine';
@@ -120,7 +111,6 @@ class SoundDirector {
     this.highResOsc.start();
   }
 
-  // 算法合成金屬腔體脈衝響應 (Algorithmic Metallic IR)
   buildMetallicIR(duration, decayTime) {
     const rate = this.ctx.sampleRate;
     const length = Math.floor(rate * duration);
@@ -130,7 +120,6 @@ class SoundDirector {
 
     for (let i = 0; i < length; i++) {
       const t = i / rate;
-      // 疊加金屬腔體多重高頻反射特徵調製
       const metallicComb = Math.sin(t * 880 * Math.PI) * 0.15 + Math.sin(t * 1760 * Math.PI) * 0.08;
       const decay = Math.exp(-t / decayTime);
       left[i] = ((Math.random() * 2 - 1) + metallicComb) * decay;
@@ -139,18 +128,16 @@ class SoundDirector {
     return impulse;
   }
 
-  // 側鏈閃避：在重大事件或警報時壓低背景音景
   triggerSidechainDucking(duckGain = 0.35, holdTime = 0.1, releaseTime = 0.45) {
     if (!this.ctx || !this.bgBus) return;
     const t = this.ctx.currentTime;
     this.bgBus.gain.cancelScheduledValues(t);
     this.bgBus.gain.setValueAtTime(this.bgBus.gain.value, t);
-    this.bgBus.gain.linearRampToValueAtTime(duckGain, t + 0.015); // 15ms 快速下壓
+    this.bgBus.gain.linearRampToValueAtTime(duckGain, t + 0.015);
     this.bgBus.gain.setValueAtTime(duckGain, t + holdTime);
-    this.bgBus.gain.linearRampToValueAtTime(1.0, t + holdTime + releaseTime); // 平滑回彈
+    this.bgBus.gain.linearRampToValueAtTime(1.0, t + holdTime + releaseTime);
   }
 
-  // 零延遲聽眾位置與朝向嚴格同步
   updateListener(camera) {
     if (!this.ctx || !this.listener) return;
     const p = camera.position;
@@ -173,18 +160,17 @@ class SoundDirector {
     }
   }
 
-  // 實時分層動態混音
   updateSoundscape(st) {
     if (!this.ctx) return;
     const t = this.ctx.currentTime;
     const maxT = Math.max(st.tempE0, st.tempI0);
 
-    const humFreq = 38 + st.magField * 2.8 + st.plasmaCurrent * 3.5;
+    const humFreq = 38 + st.magField * 2.8 + st.plasmaCurrent * 3.5 + (st.deltaZ * 15.0);
     this.humOsc.frequency.setTargetAtTime(humFreq, t, 0.1);
     const humVol = st.kinkDistortion > 0.2 ? 0.08 : 0.035;
     this.humGain.gain.setTargetAtTime(humVol, t, 0.1);
 
-    const hissVol = Math.min(0.002 + maxT * 0.002, 0.07);
+    const hissVol = Math.min(0.002 + maxT * 0.002 + (st.peakDivertorHeatFlux_MW_m2 > 8.0 ? 0.02 : 0), 0.08);
     this.noiseGain.gain.setTargetAtTime(hissVol, t, 0.15);
 
     if (st.qGain >= 1.0) {
@@ -195,12 +181,10 @@ class SoundDirector {
     }
   }
 
-  // 3D 空間定位警報 (含側鏈閃避與混響注入)
   playDirectionalCoilAlert(worldPos, severity) {
     if (!this.ctx) return;
     const t = this.ctx.currentTime;
 
-    // 觸發側鏈壓低背景音
     this.triggerSidechainDucking(0.4, 0.08, 0.35);
 
     const panner = this.ctx.createPanner();
@@ -235,7 +219,6 @@ class SoundDirector {
 
     osc.connect(gain);
     gain.connect(panner);
-    // 連接至 SFX Bus（同時獲得金屬混響與主壓縮器處理）
     panner.connect(this.sfxBus);
 
     osc.start(t);
@@ -246,13 +229,11 @@ class SoundDirector {
     }
   }
 
-  // 大破裂極限衝擊音效 (多層瞬態 + 808 下潛 + 側鏈抽吸)
   playDisruptionBurst() {
     if (!this.ctx) return;
     const ctx = this.ctx;
     const t = ctx.currentTime;
 
-    // 強力側鏈：徹底壓碎背景噪聲
     this.triggerSidechainDucking(0.05, 0.4, 1.2);
 
     // 1. 瞬態電弧放電
@@ -287,11 +268,11 @@ class SoundDirector {
 
     subOsc.connect(subDistort);
     subDistort.connect(subGain);
-    subGain.connect(this.masterBus); // 低頻下潛直通 Master，避開混響保持衝擊力
+    subGain.connect(this.masterBus);
     subOsc.start(t);
     subOsc.stop(t + 1.3);
 
-    // 3. 爆炸濾波噪聲衝擊波
+    // 3. 爆炸濾波噪聲
     const bufferSize = ctx.sampleRate * 1.0;
     const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
     const output = noiseBuffer.getChannelData(0);
@@ -319,7 +300,6 @@ class SoundDirector {
     }
   }
 
-  // 點火成功情緒和弦 (Ignition Fanfare)
   playIgnitionFanfare() {
     if (!this.ctx || this.isIgnited) return;
     this.isIgnited = true;
@@ -331,7 +311,6 @@ class SoundDirector {
     if (navigator.vibrate) navigator.vibrate([80, 40, 120]);
   }
 
-  // 焊接電弧聲效 (帶觸覺微震)
   playRepairWelding() {
     if (!this.ctx) return;
     const t = this.ctx.currentTime;
