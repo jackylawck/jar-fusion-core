@@ -63,7 +63,7 @@
   </div>
 
   <div id="ui-layer">
-    <!-- 頂部資訊與控制欄 -->
+    <!-- 頂部資訊與控制欄 (修復擠壓折行問題) -->
     <div id="top-bar">
       <div id="top-header-row">
         <div id="integrity-container">
@@ -93,18 +93,18 @@
 
         <button id="btn-cert" class="btn-top-util" data-i18n="btnCert">📜 授權證書</button>
         <button id="btn-lang-toggle" class="btn-top-util">English</button>
-        <button id="btn-hud-toggle" class="btn-top-util">👁️ <span data-i18n="hideHud">精簡視圖</span></button>
+        <button id="btn-hud-toggle" class="btn-top-util">👁️ <span id="lbl-hud-toggle" data-i18n="hideHud">精簡視圖</span></button>
       </div>
       <div id="alert-msg"></div>
     </div>
 
-    <!-- 右上角敘事動態任務 HUD -->
+    <!-- 右上角任務 HUD -->
     <div id="mission-hud">
       <div class="mission-header">
         <span class="mission-tag" data-i18n="missionActive">MISSION ACTIVE</span>
         <span id="mission-timer">00:45</span>
       </div>
-      <div class="mission-name" id="mission-name">任務：為月球基地應急電網供電</div>
+      <div class="mission-name" id="mission-name">任務：為月面基地應急電網供電</div>
       <div class="mission-desc" id="mission-desc">啟動反應堆並保持 Q ≥ 1.05，拯救 4,200 名月面科研人員</div>
       <div class="mission-progress-row">
         <div class="mission-progress-bar-bg">
@@ -121,7 +121,7 @@
       <div class="monitor-foot" id="flux-info">κ: 1.75 | δZ: 0.00m</div>
     </div>
 
-    <!-- 底部整合 Dock (開闊中間 3D 視角) -->
+    <!-- 底部整合 Dock (沉底排版，完全不擋中間 3D 模型視野) -->
     <div id="bottom-dock">
       <div id="hud">
         <div class="hud-card hud-card-core">
@@ -152,7 +152,7 @@
     </div>
   </div>
 
-  <!-- 事故歸因報告 (100% 雙語黑盒子) -->
+  <!-- 事故歸因報告 -->
   <div id="incident-modal" class="modal-overlay hidden">
     <div class="modal-card">
       <div class="modal-header">
@@ -200,7 +200,7 @@
     </div>
   </div>
 
-  <!-- 📜 國家級聚變操作員資格證書 (Certificate Share Card) -->
+  <!-- 📜 國家級聚變操作員資格證書 -->
   <div id="cert-modal" class="modal-overlay hidden">
     <div class="modal-card cert-card">
       <div class="modal-header">
