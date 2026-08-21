@@ -1,22 +1,64 @@
 // =========================================================================
-// J.A.R. 聚變核心 3D - 物理與控制求解器 (physics.js v14.0 Release)
+// J.A.R. 聚變核心 3D - 物理與控制求解器 (physics.js v16.0 Research Edition)
 // =========================================================================
 
 const COILS_COUNT = 10;
 const RADIAL_GRIDS = 25;
 const CORE_GRIDS = 21;
 
-const TOKAMAK_GEO = {
-  R0: 1.85,
-  a: 0.57,
-  kappa: 1.75,
-  delta: 0.35,
-  volume: 20.5,
-  Z_eff: 1.65,
-  impurityFrac: 0.025,
+// 1. 真實反應堆裝置預設庫 (Real Machine Presets)
+const REACTOR_PRESETS = {
+  DEFAULT: {
+    nameZh: "標準科研堆 (JAR-Standard)",
+    nameEn: "JAR Standard Reference",
+    R0: 1.85, a: 0.57, kappa: 1.75, delta: 0.35, B_T: 6.0, I_p: 1.2,
+    volume: 20.5, Z_eff: 1.65, impurityFrac: 0.025,
+    superconductor: 'LTS',
+    descriptionZh: "標準 1.5D 參考反應堆",
+    descriptionEn: "1.5D Benchmark Reference Tokamak"
+  },
+  EAST: {
+    nameZh: "EAST (東方超環)",
+    nameEn: "EAST (ASIPP)",
+    R0: 1.85, a: 0.45, kappa: 1.78, delta: 0.40, B_T: 3.5, I_p: 1.0,
+    volume: 12.8, Z_eff: 1.5, impurityFrac: 0.02,
+    superconductor: 'LTS',
+    descriptionZh: "長脈衝高約束模 (H-mode) 尖端科研",
+    descriptionEn: "World record long-pulse steady-state H-mode"
+  },
+  JET: {
+    nameZh: "JET (歐洲聯合環)",
+    nameEn: "JET (Culham)",
+    R0: 2.96, a: 0.90, kappa: 1.65, delta: 0.32, B_T: 3.45, I_p: 4.8,
+    volume: 25.0, Z_eff: 1.8, impurityFrac: 0.03,
+    superconductor: 'LTS',
+    descriptionZh: "歷史 Q=0.67 驗證里程碑 (1997)",
+    descriptionEn: "Historic Q=0.67 DT fusion record milestone"
+  },
+  ITER: {
+    nameZh: "ITER (國際熱核實驗堆)",
+    nameEn: "ITER (Cadarache)",
+    R0: 6.20, a: 2.00, kappa: 1.85, delta: 0.48, B_T: 5.3, I_p: 15.0,
+    volume: 140.0, Z_eff: 1.6, impurityFrac: 0.025,
+    superconductor: 'LTS',
+    descriptionZh: "人類首座點火燃燒堆 (目標 Q≥10)",
+    descriptionEn: "Burning plasma flagship (Target Q≥10, 500MW)"
+  },
+  SPARC: {
+    nameZh: "SPARC (MIT 高溫超導堆)",
+    nameEn: "SPARC (MIT/CFS)",
+    R0: 1.85, a: 0.57, kappa: 1.75, delta: 0.40, B_T: 12.2, I_p: 8.7,
+    volume: 20.5, Z_eff: 1.4, impurityFrac: 0.015,
+    superconductor: 'HTS',
+    descriptionZh: "極限強磁場緊湊堆 (預測 Q≥2)",
+    descriptionEn: "Compact high-field HTS burning tokamak (Q≥2)"
+  }
+};
+
+let TOKAMAK_GEO = Object.assign({
   sheathGamma: 7.0,
   tauWall: 0.015
-};
+}, REACTOR_PRESETS.DEFAULT);
 
 function getBoschHaleSigmaV(Ti_keV) {
   if (Ti_keV < 0.2) return 0;
@@ -54,6 +96,7 @@ function solveTridiagonal(A, B, C, D, N) {
 
 const FusionPhysics = {
   gameMode: 0, 
+  currentPresetKey: 'DEFAULT',
 
   grid: {
     rho: new Float32Array(RADIAL_GRIDS),
@@ -97,12 +140,18 @@ const FusionPhysics = {
     triangularityDelta: 0.35,
     neonSeeding: 0.0,
 
+    // 2. 超導物理狀態
+    superconductorType: 'LTS', // 'LTS' | 'HTS'
+    quenchRisk: 0.0,
+    isQuenched: false,
+
     q95: 3.5,
     betaN: 0.2,
     shafranovShift: 0.02,
     greenwaldRatio: 0.15,
     pFusion: 0.0,
     qGain: 0.0,
+    neutronFlux: 0.0, // 中子通量 (n/s)
     isHMode: false,
     elmBurst: false,
 
@@ -126,6 +175,23 @@ const FusionPhysics = {
     maxIntegrity: 100.0,
     integrity: 100.0,
     gameOver: false
+  },
+
+  applyPreset(presetKey) {
+    if (!REACTOR_PRESETS[presetKey]) return;
+    this.currentPresetKey = presetKey;
+    const p = REACTOR_PRESETS[presetKey];
+    
+    TOKAMAK_GEO = Object.assign(TOKAMAK_GEO, p);
+    this.state.magField = p.B_T;
+    this.state.plasmaCurrent = p.I_p;
+    this.state.superconductorType = p.superconductor;
+    this.state.triangularityDelta = p.delta;
+    this.state.quenchRisk = 0.0;
+    this.state.isQuenched = false;
+
+    this.initProfiles();
+    if (UI && UI.syncSlidersFromPhysics) UI.syncSlidersFromPhysics();
   },
 
   initProfiles() {
@@ -159,8 +225,6 @@ const FusionPhysics = {
       if (this.gameMode === 0) {
         this.state.heatECRH = 14.0;
         this.state.heatNBI = 14.0;
-        this.state.magField = 7.0;
-        this.state.plasmaCurrent = 1.4;
         this.state.density0 = 1.35;
       } else {
         this.state.heatECRH = 10.0;
@@ -176,6 +240,33 @@ const FusionPhysics = {
     return this.gameMode;
   },
 
+  // 3. 超導失超風險評估 (Quench Risk Evaluation)
+  evaluateSuperconductingQuench(dt) {
+    const s = this.state;
+    if (s.isQuenched) return;
+
+    const thermalStress = Math.max(0, (Math.max(s.tempE0, s.tempI0) - 22.0) / 18.0);
+    const mhdStress = s.kinkDistortion * 0.4 + s.deltaZ * 0.6;
+    
+    // LTS (低溫超導 Nb3Sn) 超過 8.5T 風險飆升；HTS (REBCO) 可承受極限 20T
+    let fieldStress = 0.0;
+    if (s.superconductorType === 'LTS') {
+      fieldStress = s.magField > 8.0 ? (s.magField - 8.0) * 0.25 : 0.0;
+    } else {
+      fieldStress = s.magField > 16.0 ? (s.magField - 16.0) * 0.15 : 0.0;
+    }
+
+    s.quenchRisk = Math.min(1.0, thermalStress + mhdStress + fieldStress);
+
+    // 高風險時觸發失超事故
+    if (s.quenchRisk > 0.85 && Math.random() < 0.02 * (this.gameMode === 2 ? 2.0 : 1.0)) {
+      s.isQuenched = true;
+      s.magField *= 0.35; // 磁場迅速雪崩
+      s.kinkDistortion = 1.8;
+      s.failingCoilIndex = Math.floor(Math.random() * COILS_COUNT);
+    }
+  },
+
   solve1DTransportCN(dt) {
     const g = this.grid;
     const s = this.state;
@@ -185,6 +276,8 @@ const FusionPhysics = {
 
     geo.delta = s.triangularityDelta;
     TOKAMAK_GEO.impurityFrac = 0.025 * Math.sqrt(s.stlTurbulenceMod) + s.neonSeeding * 0.01;
+
+    this.evaluateSuperconductingQuench(dt);
 
     const pOhmic = 0.08 * Math.pow(s.plasmaCurrent, 2) * Math.max(s.csFluxRate, 0.1);
     const pTotalHeat = s.heatECRH + s.heatNBI + pOhmic + s.pFusion * 0.2;
@@ -202,8 +295,8 @@ const FusionPhysics = {
     const chi_edge = chi_edge_nominal / Math.max(s.pedestalRecoveryFactor, 0.2);
     const chi_sol = 2.4 * turbMod;
 
-    const pSol_MW = Math.max(Math.min(pTotalHeat * 0.45, 60.0), 0.5);
-    const bEff = Math.min(Math.max(s.magField, 1.2), 6.5);
+    const pSol_MW = Math.max(Math.min(pTotalHeat * 0.45, 120.0), 0.5);
+    const bEff = Math.min(Math.max(s.magField, 1.2), 16.0);
     s.lambdaQ_mm = 0.63 * Math.pow(bEff, -0.77) * Math.pow(pSol_MW, 0.09) * 1e3;
 
     const divertorWettedArea = 2.0 * Math.PI * (geo.R0 + geo.a * 0.8) * Math.max(s.lambdaQ_mm * 1e-3, 0.002) * (s.fluxExpansion * 0.35);
@@ -233,7 +326,7 @@ const FusionPhysics = {
         const dVol = 4.0 * Math.PI * Math.PI * geo.R0 * Math.pow(geo.a, 2) * geo.kappa * (r === 0 ? 0.25 * dr : r) * dr;
         const pFus_density = 0.25 * Math.pow(n_SI, 2) * sigV * E_fus_J;
         
-        const maxAlphaCap = this.gameMode === 2 ? 35.0 : this.gameMode === 1 ? 22.0 : 16.0;
+        const maxAlphaCap = this.gameMode === 2 ? 80.0 : this.gameMode === 1 ? 40.0 : 20.0;
         pAlpha_local = Math.min((pFus_density * 0.2) / 1e6, maxAlphaCap);
         totalFusionPower_W += pFus_density * dVol;
       }
@@ -302,7 +395,7 @@ const FusionPhysics = {
     const nextTe = solveTridiagonal(A_e, B_e, C_e, D_e, N);
     const nextTi = solveTridiagonal(A_i, B_i, C_i, D_i, N);
 
-    const tempLimit = this.gameMode === 2 ? 55.0 : this.gameMode === 1 ? 35.0 : 25.0;
+    const tempLimit = this.gameMode === 2 ? 65.0 : this.gameMode === 1 ? 40.0 : 25.0;
     for (let i = 0; i < N; i++) {
       g.Te[i] = Math.min(Math.max(nextTe[i], 0.015), tempLimit);
       g.Ti[i] = Math.min(Math.max(nextTi[i], 0.015), tempLimit);
@@ -316,6 +409,9 @@ const FusionPhysics = {
     s.pFusion = totalFusionPower_W / 1e6;
     const pTotalIn = s.heatECRH + s.heatNBI + pOhmic;
     s.qGain = pTotalIn > 0 ? (s.pFusion / pTotalIn) : 0;
+    
+    // 計算 14.1 MeV 中子產額 (Neutron Flux: 每秒中子數)
+    s.neutronFlux = (totalFusionPower_W / E_fus_J);
 
     const shapeFactor = (1 + Math.pow(geo.kappa, 2) * (1 + 2 * Math.pow(geo.delta, 2))) / 2.0;
     s.q95 = (5.0 * Math.pow(geo.a, 2) * s.magField / (geo.R0 * s.plasmaCurrent)) * shapeFactor;
@@ -411,6 +507,7 @@ const FusionPhysics = {
     if (s.peakDivertorHeatFlux_MW_m2 > 14.0) activeDamage += (s.peakDivertorHeatFlux_MW_m2 - 14.0) * 2.0 * dmgScale;
     if (s.tempE0 > 28.0 || s.tempI0 > 28.0) activeDamage += (Math.max(s.tempE0, s.tempI0) - 28.0) * 3.0 * dmgScale;
     if (s.greenwaldRatio > 1.05) activeDamage += (s.greenwaldRatio - 1.05) * 25.0 * dmgScale;
+    if (s.isQuenched) activeDamage += 45.0 * dmgScale;
 
     if (activeDamage > 0) {
       const deltaDmg = activeDamage * dt;
@@ -446,6 +543,7 @@ const FusionPhysics = {
     if (this.state.failingCoilIndex === index) {
       this.state.failingCoilIndex = -1;
       this.state.magneticIslandWidth *= 0.15;
+      this.state.isQuenched = false;
     }
   },
 
