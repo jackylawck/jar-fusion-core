@@ -1,5 +1,5 @@
 // =========================================================================
-// J.A.R. 聚變核心 3D - 物理與控制求解器 (physics.js v8.3)
+// J.A.R. 聚變核心 3D - 1.5D 物理引擎 (physics.js v9.0 Pro Multi-Tier)
 // =========================================================================
 
 const COILS_COUNT = 10;
@@ -53,7 +53,8 @@ function solveTridiagonal(A, B, C, D, N) {
 }
 
 const FusionPhysics = {
-  isAdvancedMode: false, // 🟢 預設為簡易穩定模式 (易維持 Q>1, 必穩定不易爆裂)
+  // 模式：0 = 兒童簡易 (Easy), 1 = 工程標準 (Standard), 2 = 博士科研 (Research)
+  gameMode: 0, 
 
   grid: {
     rho: new Float32Array(RADIAL_GRIDS),
@@ -86,11 +87,17 @@ const FusionPhysics = {
     tempE0: 0.8,
     tempI0: 0.8,
     density0: 0.5,
-    magField: 6.0,
-    plasmaCurrent: 1.2,
 
-    heatECRH: 0.0,
-    heatNBI: 0.0,
+    // 核心 9 大可調參數
+    heatECRH: 0.0,            // 1. 微波加熱 (MW)
+    heatNBI: 0.0,             // 2. 中性束注入 (MW)
+    magField: 6.0,            // 3. 環向磁場 (T)
+    plasmaCurrent: 1.2,       // 4. 等離子體電流 (MA)
+    pumpingSpeed: 10.0,       // 5. [標準] 偏濾器抽速 (m^3/s)
+    fluxExpansion: 4.5,       // 6. [標準] 磁通擴展比
+    csFluxRate: 0.5,          // 7. [科研] 中心螺線管磁通率 (V-s/s)
+    triangularityDelta: 0.35, // 8. [科研] 三角形形變度 delta
+    neonSeeding: 0.0,         // 9. [科研] 氖氣雜質輻射注入 (Pa*m3/s)
 
     q95: 3.5,
     betaN: 0.2,
@@ -151,16 +158,25 @@ const FusionPhysics = {
   togglePower() {
     this.state.isOnline = !this.state.isOnline;
     if (this.state.isOnline) {
-      this.state.heatECRH = 12.0;
-      this.state.heatNBI = 12.0;
-      this.state.density0 = 1.2;
+      if (this.gameMode === 0) {
+        // 兒童簡易模式：一鍵設定最完美自持穩定燃燒參數
+        this.state.heatECRH = 14.0;
+        this.state.heatNBI = 14.0;
+        this.state.magField = 7.0;
+        this.state.plasmaCurrent = 1.4;
+        this.state.density0 = 1.35;
+      } else {
+        this.state.heatECRH = 10.0;
+        this.state.heatNBI = 10.0;
+        this.state.density0 = 1.2;
+      }
     }
     return this.state.isOnline;
   },
 
-  toggleMode() {
-    this.isAdvancedMode = !this.isAdvancedMode;
-    return this.isAdvancedMode;
+  cycleGameMode() {
+    this.gameMode = (this.gameMode + 1) % 3;
+    return this.gameMode;
   },
 
   solve1DTransportCN(dt) {
@@ -170,7 +186,14 @@ const FusionPhysics = {
     const N = RADIAL_GRIDS;
     const dr = 1.0 / (CORE_GRIDS - 1);
 
-    const pTotalHeat = s.heatECRH + s.heatNBI + s.pFusion * 0.2;
+    // 科研模式引入雜質冷卻氣體注入 (Neon Seeding) 與幾何三角形形變度
+    geo.delta = s.triangularityDelta;
+    TOKAMAK_GEO.impurityFrac = 0.025 * Math.sqrt(s.stlTurbulenceMod) + s.neonSeeding * 0.01;
+
+    // 中心螺線管歐姆加熱增益
+    const pOhmic = 0.08 * Math.pow(s.plasmaCurrent, 2) * Math.max(s.csFluxRate, 0.1);
+    const pTotalHeat = s.heatECRH + s.heatNBI + pOhmic + s.pFusion * 0.2;
+
     const pThresholdH = 0.0488 * Math.pow(s.density0, 0.717) * Math.pow(s.magField, 0.8) * Math.pow(geo.R0, 1.0);
     s.isHMode = pTotalHeat > pThresholdH;
 
@@ -184,12 +207,13 @@ const FusionPhysics = {
     const chi_edge = chi_edge_nominal / Math.max(s.pedestalRecoveryFactor, 0.2);
     const chi_sol = 2.4 * turbMod;
 
+    // 偏濾器磁通擴展 (Flux Expansion) 稀釋靶板熱流
     const pSol_MW = Math.max(Math.min(pTotalHeat * 0.45, 60.0), 0.5);
     const bEff = Math.min(Math.max(s.magField, 1.2), 6.5);
     s.lambdaQ_mm = 0.63 * Math.pow(bEff, -0.77) * Math.pow(pSol_MW, 0.09) * 1e3;
 
-    const divertorWettedArea = 2.0 * Math.PI * (geo.R0 + geo.a * 0.8) * Math.max(s.lambdaQ_mm * 1e-3, 0.002) * 1.5;
-    s.peakDivertorHeatFlux_MW_m2 = (pSol_MW * 0.7) / Math.max(divertorWettedArea, 0.5);
+    const divertorWettedArea = 2.0 * Math.PI * (geo.R0 + geo.a * 0.8) * Math.max(s.lambdaQ_mm * 1e-3, 0.002) * (s.fluxExpansion * 0.35);
+    s.peakDivertorHeatFlux_MW_m2 = (pSol_MW * 0.65) / Math.max(divertorWettedArea, 0.5);
 
     let totalFusionPower_W = 0;
     let volIntegralTe = 0, volIntegralTi = 0, volIntegralN = 0;
@@ -215,8 +239,7 @@ const FusionPhysics = {
         const dVol = 4.0 * Math.PI * Math.PI * geo.R0 * Math.pow(geo.a, 2) * geo.kappa * (r === 0 ? 0.25 * dr : r) * dr;
         const pFus_density = 0.25 * Math.pow(n_SI, 2) * sigV * E_fus_J;
         
-        // 簡易模式下對 Alpha 自加熱進行穩定阻尼，防止失控
-        const maxAlphaCap = this.isAdvancedMode ? 35.0 : 18.0;
+        const maxAlphaCap = this.gameMode === 2 ? 35.0 : this.gameMode === 1 ? 22.0 : 16.0;
         pAlpha_local = Math.min((pFus_density * 0.2) / 1e6, maxAlphaCap);
         totalFusionPower_W += pFus_density * dVol;
       }
@@ -285,11 +308,11 @@ const FusionPhysics = {
     const nextTe = solveTridiagonal(A_e, B_e, C_e, D_e, N);
     const nextTi = solveTridiagonal(A_i, B_i, C_i, D_i, N);
 
-    const tempLimit = this.isAdvancedMode ? 55.0 : 32.0; // 簡易模式下限制最高溫
+    const tempLimit = this.gameMode === 2 ? 55.0 : this.gameMode === 1 ? 35.0 : 25.0;
     for (let i = 0; i < N; i++) {
       g.Te[i] = Math.min(Math.max(nextTe[i], 0.015), tempLimit);
       g.Ti[i] = Math.min(Math.max(nextTi[i], 0.015), tempLimit);
-      const solDecay = (i >= CORE_GRIDS) ? 0.08 : 0.015;
+      const solDecay = (i >= CORE_GRIDS) ? (0.05 + s.pumpingSpeed * 0.003) : 0.012;
       g.n[i] = Math.max(g.n[i] - solDecay * g.n[i] * dt, 0.02);
     }
 
@@ -297,10 +320,10 @@ const FusionPhysics = {
     s.tempI0 = g.Ti[0];
     s.density0 = g.n[0];
     s.pFusion = totalFusionPower_W / 1e6;
-    const pTotalIn = s.heatECRH + s.heatNBI;
+    const pTotalIn = s.heatECRH + s.heatNBI + pOhmic;
     s.qGain = pTotalIn > 0 ? (s.pFusion / pTotalIn) : 0;
 
-    const shapeFactor = (1 + Math.pow(geo.kappa, 2)) / 2.0;
+    const shapeFactor = (1 + Math.pow(geo.kappa, 2) * (1 + 2 * Math.pow(geo.delta, 2))) / 2.0;
     s.q95 = (5.0 * Math.pow(geo.a, 2) * s.magField / (geo.R0 * s.plasmaCurrent)) * shapeFactor;
 
     const nominal_r_res = Math.sqrt(Math.max(2.0 - 1.05, 0) / Math.max(s.q95 - 1.05, 0.1));
@@ -327,15 +350,16 @@ const FusionPhysics = {
 
     const shear_res = Math.max(g.magneticShear[resIndex], 0.08);
     const gradP_res = (g.n[resIndex + 1] * g.Te[resIndex + 1] - g.n[resIndex - 1] * g.Te[resIndex - 1]) / (2 * dr);
-    const vdeDestabilization = Math.pow(s.deltaZ / 0.4, 2) * (this.isAdvancedMode ? 3.5 : 1.2);
+    const vdeDestabilization = Math.pow(s.deltaZ / 0.4, 2) * (this.gameMode === 2 ? 3.5 : 0.8);
 
     const deltaPrime = -4.0 / Math.max(s.resRadius, 0.2) + Math.abs(gradP_res) / (shear_res * 1.4) + vdeDestabilization + (s.q95 < 2.0 ? 6.0 : 0.0);
 
-    const dw_dt = 0.16 * (deltaPrime + (s.betaN * (this.isAdvancedMode ? 0.9 : 0.4)) / Math.max(s.magneticIslandWidth, 0.04));
+    const islandDrive = this.gameMode === 2 ? 0.9 : this.gameMode === 1 ? 0.4 : 0.1;
+    const dw_dt = 0.16 * (deltaPrime + (s.betaN * islandDrive) / Math.max(s.magneticIslandWidth, 0.04));
     s.magneticIslandWidth = Math.max(0, Math.min(s.magneticIslandWidth + dw_dt * dt, 1.25));
-    s.kinkDistortion = s.magneticIslandWidth;
+    s.kinkDistortion = (this.gameMode === 0) ? 0.0 : s.magneticIslandWidth;
 
-    if (s.magneticIslandWidth > 0.75 && s.failingCoilIndex === -1) {
+    if (s.magneticIslandWidth > 0.75 && s.failingCoilIndex === -1 && this.gameMode > 0) {
       s.failingCoilIndex = Math.floor(Math.random() * COILS_COUNT);
     }
 
@@ -354,7 +378,7 @@ const FusionPhysics = {
     }
 
     const decayIndex = (geo.kappa - 1.0) * 1.8;
-    const rawGrowth = (s.betaN > 2.8 || s.kinkDistortion > 0.4) ? decayIndex * (this.isAdvancedMode ? 4.5 : 2.0) : -3.0;
+    const rawGrowth = (s.betaN > 2.8 || s.kinkDistortion > 0.4) ? decayIndex * (this.gameMode === 2 ? 4.5 : 1.5) : -3.0;
     s.vdeGrowthRate = rawGrowth / (1.0 + geo.tauWall * Math.abs(rawGrowth));
 
     this.vdeController.tuneLinearizedGains(Math.max(rawGrowth, 2.0), s.plasmaCurrent);
@@ -365,7 +389,7 @@ const FusionPhysics = {
     const controlSignal = this.vdeController.Kp * s.deltaZ + this.vdeController.Kd * dDeltaZ_dt;
     s.vdeFeedbackForce = Math.min(Math.max(controlSignal, -this.vdeController.maxControlVolt), this.vdeController.maxControlVolt);
 
-    if (s.vdeGrowthRate > 0) {
+    if (s.vdeGrowthRate > 0 && this.gameMode > 0) {
       const netGrowth = Math.max(0.01 * Math.exp(s.vdeGrowthRate * dt) - s.vdeFeedbackForce * 0.01 * dt, -0.3 * dt);
       s.deltaZ = Math.max(0, Math.min(s.deltaZ + netGrowth, 1.2));
     } else {
@@ -379,9 +403,14 @@ const FusionPhysics = {
     this.solve1DTransportCN(dt);
     const s = this.state;
 
-    // 損傷倍率：簡易模式下大幅降低，提供極佳容錯率
-    const dmgScale = this.isAdvancedMode ? 1.0 : 0.35;
+    // 🟢 兒童簡易模式：直接豁免第一壁扣血，永遠穩定巡航！
+    if (this.gameMode === 0) {
+      s.integrity = 100.0;
+      s.maxIntegrity = 100.0;
+      return;
+    }
 
+    const dmgScale = this.gameMode === 2 ? 1.0 : 0.35;
     let activeDamage = 0;
     if (s.kinkDistortion > 0.35) activeDamage += s.kinkDistortion * 18.0 * dmgScale;
     if (s.elmBurst) activeDamage += 6.5 * dmgScale;
@@ -430,8 +459,6 @@ const FusionPhysics = {
   applyCoreGeometryModifiers(triangleCount, aspectRatio, maxDim) {
     const complexityFactor = Math.min(Math.max(triangleCount / 4000, 0.6), 2.4);
     this.state.stlTurbulenceMod = complexityFactor;
-    TOKAMAK_GEO.impurityFrac = 0.025 * Math.sqrt(complexityFactor);
-
     return {
       triangleCount,
       complexityFactor: complexityFactor.toFixed(2),
